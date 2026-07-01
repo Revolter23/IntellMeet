@@ -1,22 +1,28 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import main from './database/mongodb.js'; // Ensure database starts up as well
 
+import AuthRoutes from './routes/AuthRoutes.js';
+
 const app = express();
 const port = 3000;
 
-app.use(cors());
+app.use(cors({
+    origin: "http://localhost:5173",
+    credentials: true
+}));
+app.use(cookieParser());
 app.use(helmet());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 main()
 
-app.get('/', (req, res) => {
-    res.send('Hello World!');
-});
+app.use("/auth", AuthRoutes);
 
 // 1. Wrap the express application in an HTTP server
 const httpServer = createServer(app);

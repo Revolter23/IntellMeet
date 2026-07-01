@@ -15,4 +15,4 @@ const UserSchema = new Schema({
     avatar: String,
 });
 
-export const User = model('User', User);
+export const User = model('User', UserSchema);
