@@ -1,9 +1,33 @@
 import { User } from '../models/UserModel.js';
+
+import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { authenticateToken } from '../middleware/auth.js';
+import { v2 as cloudinary } from 'cloudinary';
+
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // Limit each IP to 5 requests per window
+    message: 'Too many login attempts. Please try again after 15 minutes.',
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+
+const signatureLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 30, // Limit to 30 signature generations per hour
+    message: 'You have exceeded the maximum avatar update limit. Please try again in an hour.'
+});
+
+// Configure Cloudinary globally
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
 
 const router = express.Router();
 
@@ -69,7 +93,7 @@ router.post('/signup', async (req, res) => {
     }
 });
 
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
     try {
         const { email, password } = req.body;
         const user = await User.findOne({ email });
@@ -153,7 +177,7 @@ router.post('/logout', (req, res) => {
 });
 
 // Get Cloudinary upload signature
-router.get('/cloudinary-signature', authenticateToken, (req, res) => {
+router.get('/cloudinary-signature', signatureLimiter, authenticateToken, async (req, res) => {
     try {
         const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
         const apiKey = process.env.CLOUDINARY_API_KEY;
@@ -165,8 +189,29 @@ router.get('/cloudinary-signature', authenticateToken, (req, res) => {
             });
         }
 
+        const folder = `intellmeet_avatars/${req.user.email}`;
+
+        // Check for existing images in the user's specific folder path and delete them
+        try {
+            const existingResources = await cloudinary.api.resources({
+                type: 'upload',
+                prefix: `${folder}/`,
+                max_results: 100
+            });
+
+            console.log("Existing Resources:", existingResources);
+
+            if (existingResources.resources && existingResources.resources.length > 0) {
+                const publicIds = existingResources.resources.map(resource => resource.public_id);
+                console.log(`Deleting existing Cloudinary resources for user ${req.user.email}:`, publicIds);
+                await cloudinary.api.delete_resources(publicIds);
+            }
+        } catch (cloudinaryError) {
+            // Log error but do not block generating new upload signature
+            console.error("Error checking/deleting existing Cloudinary avatars:", cloudinaryError);
+        }
+
         const timestamp = Math.round(new Date().getTime() / 1000);
-        const folder = 'intellmeet_avatars';
 
         // Generate signature: sort alphabetically, join key=val with &, and append secret
         const paramsToSign = {
@@ -194,6 +239,15 @@ router.get('/cloudinary-signature', authenticateToken, (req, res) => {
     }
 });
 
+// Helper to extract Cloudinary Public ID from URL
+function getPublicIdFromUrl(url) {
+    if (!url) return null;
+    const splitUrl = url.split('/image/upload/');
+    if (splitUrl.length < 2) return null;
+    const relativePath = splitUrl[1].replace(/^v\d+\//, '');
+    return decodeURIComponent(relativePath).split('.').slice(0, -1).join('.');
+}
+
 // Update user profile details
 router.put('/profile', authenticateToken, async (req, res) => {
     try {
@@ -201,7 +255,23 @@ router.put('/profile', authenticateToken, async (req, res) => {
         const user = req.user;
 
         if (name !== undefined) user.name = name;
-        if (avatar !== undefined) user.avatar = avatar;
+        if (avatar !== undefined) {
+            const publicId = getPublicIdFromUrl(avatar);
+            if (publicId && avatar.includes("cloudinary")) {
+                const transformedUrl = cloudinary.url(publicId, {
+                    width: 200,
+                    height: 200,
+                    crop: "fill",
+                    gravity: "face",
+                    fetch_format: "auto",
+                    quality: "auto",
+                    secure: true
+                });
+                user.avatar = transformedUrl;
+            } else {
+                user.avatar = avatar;
+            }
+        }
 
         await user.save();
 

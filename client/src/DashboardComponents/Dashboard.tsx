@@ -1,7 +1,9 @@
 "use no memo";
 
 import { useState, useEffect } from "react"
+import { useNavigate } from "react-router"
 import { useAuthStore } from "../store/useAuthStore"
+import { api } from "../lib/api"
 
 import {
 	VideoIcon,
@@ -14,15 +16,19 @@ import {
 } from "../lib/icons"
 
 export default function Dashboard() {
+	const navigate = useNavigate()
 	const [time, setTime] = useState(new Date())
 	const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
 	const { user } = useAuthStore()
 
-	// Interactive dummy state
 	const [isMuted, setIsMuted] = useState(false)
 	const [isCamOff, setIsCamOff] = useState(false)
 	const [showMeetingModal, setShowMeetingModal] = useState(false)
-	const [meetingLink] = useState("https://intellmeet.live/m/xrt-vdwq-jhz")
+	const [meetingCode, setMeetingCode] = useState("")
+	const [joinCodeInput, setJoinCodeInput] = useState("")
+	const [loadingMeeting, setLoadingMeeting] = useState(false)
+
+	const meetingLink = `${window.location.origin}/meetings/${meetingCode}`
 
 	useEffect(() => {
 		const timer = setInterval(() => setTime(new Date()), 1000)
@@ -40,6 +46,36 @@ export default function Dashboard() {
 		setTimeout(() => setCopiedIndex(null), 2000)
 	}
 
+	const handleStartMeeting = async () => {
+		setLoadingMeeting(true)
+		try {
+			const res = await api.post("/meetings", {
+				title: "Instant Meeting",
+				startTime: new Date().toISOString(),
+				isPrivate: false
+			})
+			const code = res.data.meeting.meetingCode
+			setMeetingCode(code)
+			setShowMeetingModal(true)
+		} catch (err) {
+			console.error("Error starting meeting:", err)
+			alert("Failed to start meeting. Please try again.")
+		} finally {
+			setLoadingMeeting(false)
+		}
+	}
+
+	const handleJoinCode = () => {
+		if (!joinCodeInput.trim()) return;
+		let code = joinCodeInput.trim();
+		if (code.includes("/meetings/")) {
+			code = code.split("/meetings/")[1].split("?")[0];
+		} else if (code.includes("/m/")) {
+			code = code.split("/m/")[1].split("?")[0];
+		}
+		navigate(`/meetings/${code}?audio=${!isMuted}&video=${!isCamOff}`);
+	}
+
 	const formatTime = (date: Date) => {
 		return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 	}
@@ -49,9 +85,6 @@ export default function Dashboard() {
 	}
 
 	const upcomingMeetings = [
-		{ id: 1, title: "Product Sync & Design Review", time: "10:30 AM - 11:15 AM", organizer: "Sarah Jenkins", active: true },
-		{ id: 2, title: "AI Integration Alignment", time: "01:30 PM - 02:15 PM", organizer: "Alex Rivera", active: false },
-		{ id: 3, title: "Weekly Retro & Planning", time: "04:00 PM - 05:00 PM", organizer: "Engineering Team", active: false },
 	]
 
 	return (
@@ -172,6 +205,9 @@ export default function Dashboard() {
 										<input
 											type="text"
 											placeholder="e.g. xrt-vdwq-jhz"
+											value={joinCodeInput}
+											onChange={(e) => setJoinCodeInput(e.target.value)}
+											onKeyDown={(e) => e.key === 'Enter' && handleJoinCode()}
 											className="w-full px-4 py-2 bg-slate-950/50 border border-slate-800 rounded-xl text-sm placeholder:text-slate-700 text-slate-200 focus:outline-none focus:border-indigo-500 transition-all"
 										/>
 									</div>
@@ -180,14 +216,18 @@ export default function Dashboard() {
 
 							<div className="space-y-3">
 								<button
-									onClick={() => setShowMeetingModal(true)}
-									className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-medium text-sm shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 transition-all duration-300 transform active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+									onClick={handleStartMeeting}
+									disabled={loadingMeeting}
+									className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-medium text-sm shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 transition-all duration-300 transform active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
 								>
 									<VideoIcon size={16} />
-									Start Instant Meeting
+									{loadingMeeting ? "Creating..." : "Start Instant Meeting"}
 								</button>
 
-								<button className="w-full py-2.5 px-4 rounded-xl border border-slate-800 bg-slate-900/30 hover:bg-slate-900/60 hover:border-slate-700 text-slate-200 font-medium text-sm transition-all duration-300 transform active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2">
+								<button
+									onClick={handleJoinCode}
+									className="w-full py-2.5 px-4 rounded-xl border border-slate-800 bg-slate-900/30 hover:bg-slate-900/60 hover:border-slate-700 text-slate-200 font-medium text-sm transition-all duration-300 transform active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+								>
 									Join via Code
 								</button>
 							</div>
@@ -210,29 +250,36 @@ export default function Dashboard() {
 
 					<div className="p-6 flex-1 flex flex-col justify-between">
 						<div className="space-y-4">
-							{upcomingMeetings.map((mtg) => (
-								<div
-									key={mtg.id}
-									className={`p-3.5 rounded-xl border transition-all duration-200 ${mtg.active
-										? "bg-indigo-600/5 border-indigo-500/20 shadow-md shadow-indigo-500/[0.02]"
-										: "bg-slate-900/20 border-slate-900 hover:border-slate-800/80"
-										}`}
-								>
-									<div className="flex justify-between items-start mb-1.5">
-										<span className="font-semibold text-sm text-slate-200 line-clamp-1">{mtg.title}</span>
-										{mtg.active && (
-											<span className="px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[9px] font-bold text-indigo-400 tracking-wide uppercase">
-												Now
-											</span>
-										)}
-									</div>
+							{upcomingMeetings.length > 0 ?
+								(
+									upcomingMeetings.map((mtg) => (
+										<div
+											key={mtg.id}
+											className={`p-3.5 rounded-xl border transition-all duration-200 ${mtg.active
+												? "bg-indigo-600/5 border-indigo-500/20 shadow-md shadow-indigo-500/[0.02]"
+												: "bg-slate-900/20 border-slate-900 hover:border-slate-800/80"
+												}`}
+										>
+											<div className="flex justify-between items-start mb-1.5">
+												<span className="font-semibold text-sm text-slate-200 line-clamp-1">{mtg.title}</span>
+												{mtg.active && (
+													<span className="px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[9px] font-bold text-indigo-400 tracking-wide uppercase">
+														Now
+													</span>
+												)}
+											</div>
 
-									<div className="flex items-center justify-between text-xs text-slate-500">
-										<span>{mtg.time}</span>
-										<span className="font-medium text-slate-400">{mtg.organizer}</span>
-									</div>
-								</div>
-							))}
+											<div className="flex items-center justify-between text-xs text-slate-500">
+												<span>{mtg.time}</span>
+												<span className="font-medium text-slate-400">{mtg.organizer}</span>
+											</div>
+										</div>
+									))
+								)
+								: (
+									< p className="text-lg text-slate-500 text-center">No upcoming meetings</p>
+								)
+							}
 						</div>
 
 						<button className="w-full py-2.5 px-4 mt-6 rounded-xl border border-slate-800/80 bg-slate-900/30 hover:bg-slate-900/60 text-slate-300 font-medium text-xs tracking-wide transition-all uppercase cursor-pointer flex items-center justify-center gap-1.5">
@@ -242,10 +289,10 @@ export default function Dashboard() {
 					</div>
 				</div>
 
-			</section>
+			</section >
 
 			{/* Productivity widgets / Platform stats */}
-			<section className="grid grid-cols-1 md:grid-cols-3 gap-6">
+			< section className="grid grid-cols-1 md:grid-cols-3 gap-6" >
 
 				<div className="p-5 border border-slate-900 bg-slate-950/40 rounded-2xl flex items-center gap-4">
 					<div className="h-10 w-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
@@ -277,54 +324,56 @@ export default function Dashboard() {
 					</div>
 				</div>
 
-			</section>
+			</section >
 
 			{/* Mock Meeting Room Started Popup Modal */}
-			{showMeetingModal && (
-				<div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-					<div className="w-full max-w-md bg-slate-950 border border-slate-900 rounded-2xl shadow-2xl p-6 relative overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-						<div className="absolute top-0 right-0 w-48 h-48 rounded-full bg-indigo-500/5 blur-3xl pointer-events-none" />
+			{
+				showMeetingModal && (
+					<div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+						<div className="w-full max-w-md bg-slate-950 border border-slate-900 rounded-2xl shadow-2xl p-6 relative overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+							<div className="absolute top-0 right-0 w-48 h-48 rounded-full bg-indigo-500/5 blur-3xl pointer-events-none" />
 
-						<div className="flex flex-col items-center text-center space-y-4">
-							<div className="h-14 w-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-lg shadow-indigo-600/10">
-								<SparklesIcon size={24} />
-							</div>
+							<div className="flex flex-col items-center text-center space-y-4">
+								<div className="h-14 w-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-lg shadow-indigo-600/10">
+									<SparklesIcon size={24} />
+								</div>
 
-							<div className="space-y-1">
-								<h3 className="text-lg font-bold text-white">Your Meeting is Ready!</h3>
-								<p className="text-xs text-slate-400">Share this link to invite other participants to join you</p>
-							</div>
+								<div className="space-y-1">
+									<h3 className="text-lg font-bold text-white">Your Meeting is Ready!</h3>
+									<p className="text-xs text-slate-400">Share this link to invite other participants to join you</p>
+								</div>
 
-							{/* Link copying box */}
-							<div className="w-full p-3 bg-slate-900/60 border border-slate-800 rounded-xl flex items-center justify-between gap-3">
-								<span className="text-xs text-indigo-300 select-all truncate font-mono">{meetingLink}</span>
-								<button
-									onClick={() => copyToClipboard(meetingLink, 0)}
-									className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-									title="Copy meeting link"
-								>
-									{copiedIndex === 0 ? <CheckIcon className="text-emerald-400" /> : <CopyIcon />}
-								</button>
-							</div>
+								{/* Link copying box */}
+								<div className="w-full p-3 bg-slate-900/60 border border-slate-800 rounded-xl flex items-center justify-between gap-3">
+									<span className="text-xs text-indigo-300 select-all truncate font-mono">{meetingLink}</span>
+									<button
+										onClick={() => copyToClipboard(meetingLink, 0)}
+										className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+										title="Copy meeting link"
+									>
+										{copiedIndex === 0 ? <CheckIcon className="text-emerald-400" /> : <CopyIcon />}
+									</button>
+								</div>
 
-							<div className="w-full grid grid-cols-2 gap-3 pt-3">
-								<button
-									onClick={() => setShowMeetingModal(false)}
-									className="w-full py-2 border border-slate-800 bg-slate-900/20 hover:bg-slate-900/60 rounded-xl text-slate-300 font-medium text-xs tracking-wide transition-all cursor-pointer"
-								>
-									Close Settings
-								</button>
-								<button
-									onClick={() => setShowMeetingModal(false)}
-									className="w-full py-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl font-medium text-xs tracking-wide shadow-lg shadow-indigo-600/25 transition-all cursor-pointer"
-								>
-									Enter Room
-								</button>
+								<div className="w-full grid grid-cols-2 gap-3 pt-3">
+									<button
+										onClick={() => setShowMeetingModal(false)}
+										className="w-full py-2 border border-slate-800 bg-slate-900/20 hover:bg-slate-900/60 rounded-xl text-slate-300 font-medium text-xs tracking-wide transition-all cursor-pointer"
+									>
+										Close Settings
+									</button>
+									<button
+										onClick={() => navigate(`/meetings/${meetingCode}?audio=${!isMuted}&video=${!isCamOff}`)}
+										className="w-full py-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl font-medium text-xs tracking-wide shadow-lg shadow-indigo-600/25 transition-all cursor-pointer"
+									>
+										Enter Room
+									</button>
+								</div>
 							</div>
 						</div>
 					</div>
-				</div>
-			)}
+				)
+			}
 		</>
 	)
 }

@@ -1,18 +1,15 @@
 import './App.css'
-import { useEffect, useState } from 'react'
-import { io } from 'socket.io-client'
+import { useEffect } from 'react'
 import { Routes, Route, Link, Navigate } from 'react-router'
 import Login from './AuthComponents/Login'
 import SignUp from './AuthComponents/SignUp'
 import Dashboard from './DashboardComponents/Dashboard'
 import Profile from './DashboardComponents/Profile'
 import Layout from './DashboardComponents/Layout'
+import MeetingRoom from './DashboardComponents/MeetingRoom'
 import { useAuthStore } from './store/useAuthStore'
 
-// Connect to the backend server
-const socket = io('http://localhost:3000')
-
-function Home({ isConnected }: { isConnected: boolean }) {
+function Home() {
   const { accessToken, user } = useAuthStore()
 
   return (
@@ -28,7 +25,7 @@ function Home({ isConnected }: { isConnected: boolean }) {
           Experience AI-powered collaboration and real-time meeting intelligence.
         </p>
 
-        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
+        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
           {accessToken && user ? (
             <Link
               to="/dashboard"
@@ -52,16 +49,6 @@ function Home({ isConnected }: { isConnected: boolean }) {
               </Link>
             </>
           )}
-        </div>
-
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-slate-900 bg-slate-950/60 text-sm">
-          <span className="text-slate-500">Server Status:</span>
-          <span className="flex items-center gap-1.5">
-            <span className={`h-2 w-2 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-            <span className={isConnected ? 'text-emerald-400 font-medium' : 'text-rose-400 font-medium'}>
-              {isConnected ? 'Connected' : 'Disconnected'}
-            </span>
-          </span>
         </div>
       </div>
     </div>
@@ -89,28 +76,11 @@ function PublicRoute({ children }: RouteGuardProps) {
 }
 
 function App() {
-  const [isConnected, setIsConnected] = useState(socket.connected)
   const { isCheckingAuth, checkAuth } = useAuthStore()
 
   useEffect(() => {
     // Perform silent refresh on boot
     checkAuth()
-
-    function onConnect() {
-      setIsConnected(true)
-    }
-
-    function onDisconnect() {
-      setIsConnected(false)
-    }
-
-    socket.on('connect', onConnect)
-    socket.on('disconnect', onDisconnect)
-
-    return () => {
-      socket.off('connect', onConnect)
-      socket.off('disconnect', onDisconnect)
-    }
   }, [checkAuth])
 
   if (isCheckingAuth) {
@@ -139,7 +109,8 @@ function App() {
 
   return (
     <Routes>
-      <Route path="/" element={<Home isConnected={isConnected} />} />
+      <Route path="/" element={<Home />} />
+
       <Route
         path="/login"
         element={
@@ -166,6 +137,14 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/profile" element={<Profile />} />
       </Route>
+      <Route
+        path="/meetings/:meetingCode"
+        element={
+          <ProtectedRoute>
+            <MeetingRoom />
+          </ProtectedRoute>
+        }
+      />
     </Routes>
   )
 }
