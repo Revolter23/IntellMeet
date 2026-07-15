@@ -1,6 +1,7 @@
 import express from 'express';
 import { Meeting } from '../models/MeetingModel.js';
 import { authenticateToken } from '../middleware/auth.js';
+import redisClient, { isRedisConnected } from '../database/redis.js';
 
 const router = express.Router();
 
@@ -110,44 +111,98 @@ router.get('/:meetingCode', authenticateToken, async (req, res) => {
     try {
         const { meetingCode } = req.params;
         const userId = req.user.id;
+        const cacheKey = `meeting:${meetingCode}`;
 
-        const meeting = await Meeting.findOne({ meetingCode });
+        let meeting;
+
+        // 1. Try to fetch from Redis if connected
+        if (isRedisConnected) {
+            try {
+                const cachedData = await redisClient.get(cacheKey);
+                if (cachedData) {
+                    meeting = JSON.parse(cachedData);
+                }
+            } catch (err) {
+                console.error('Redis meeting read error:', err.message || err);
+            }
+        }
+
+        if (!meeting) {
+            // Cache miss or Redis offline -> Query MongoDB (populated)
+            meeting = await Meeting.findOne({ meetingCode })
+                .populate('host', 'name email avatar')
+                .populate('participants.user', 'name email avatar');
+
+            if (meeting && isRedisConnected) {
+                try {
+                    // Cache populated meeting for 10 minutes (600 seconds)
+                    await redisClient.set(cacheKey, JSON.stringify(meeting), { EX: 600 });
+                } catch (err) {
+                    console.error('Redis meeting write error:', err.message || err);
+                }
+            }
+        }
 
         if (!meeting) {
             return res.status(404).json({ message: 'Meeting not found' });
         }
 
+        // Host check compatibility (whether host field is populated or an ID string)
+        const hostId = meeting.host._id ? meeting.host._id.toString() : meeting.host.toString();
+
         // If the meeting is private, check that the user is authorized to access it
-        if (meeting.isPrivate && meeting.host.toString() !== userId) {
-            const isParticipant = meeting.participants.some(p => p.user.toString() === userId);
+        if (meeting.isPrivate && hostId !== userId) {
+            const isParticipant = meeting.participants.some(p => {
+                const pUserId = p.user._id ? p.user._id.toString() : p.user.toString();
+                return pUserId === userId;
+            });
             if (!isParticipant) {
                 return res.status(403).json({ message: 'Access denied: This is a private meeting room' });
             }
         }
 
         // Add user to participants if they are not already in the participant log
-        const hasJoined = meeting.participants.some(p => p.user.toString() === userId);
-        if (!hasJoined) {
-            meeting.participants.push({
-                user: userId,
-                role: meeting.host.toString() === userId ? 'host' : 'attendee',
-                joinedAt: new Date()
-            });
+        const hasJoined = meeting.participants.some(p => {
+            const pUserId = p.user._id ? p.user._id.toString() : p.user.toString();
+            return pUserId === userId;
+        });
+
+        if (!hasJoined || meeting.status === 'scheduled') {
+            const dbMeeting = await Meeting.findOne({ meetingCode });
+            if (!dbMeeting) {
+                return res.status(404).json({ message: 'Meeting not found in database' });
+            }
+
+            if (!hasJoined) {
+                dbMeeting.participants.push({
+                    user: userId,
+                    role: dbMeeting.host.toString() === userId ? 'host' : 'attendee',
+                    joinedAt: new Date()
+                });
+            }
+
+            if (dbMeeting.status === 'scheduled') {
+                dbMeeting.status = 'active';
+            }
+
+            await dbMeeting.save();
+
+            // Refresh cache with populated meeting
+            const updatedMeeting = await Meeting.findById(dbMeeting._id)
+                .populate('host', 'name email avatar')
+                .populate('participants.user', 'name email avatar');
+
+            if (isRedisConnected) {
+                try {
+                    await redisClient.set(cacheKey, JSON.stringify(updatedMeeting), { EX: 600 });
+                } catch (err) {
+                    console.error('Redis meeting write error:', err.message || err);
+                }
+            }
+            meeting = updatedMeeting;
         }
 
-        // If the meeting was scheduled, transition it to active now that a participant is joining
-        if (meeting.status === 'scheduled') {
-            meeting.status = 'active';
-        }
-
-        await meeting.save();
-
-        // Populate for the frontend response
-        const populatedMeeting = await Meeting.findById(meeting._id)
-            .populate('host', 'name email avatar')
-            .populate('participants.user', 'name email avatar');
-
-        res.json({ meeting: populatedMeeting });
+        res.json({ meeting });
     } catch (error) {
         console.error('Error fetching/joining meeting details:', error);
         res.status(500).json({ message: 'Internal server error fetching meeting details' });
@@ -187,6 +242,15 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
         await meeting.save();
 
+        // Invalidate Redis meeting details cache
+        if (isRedisConnected) {
+            try {
+                await redisClient.del(`meeting:${meeting.meetingCode}`);
+            } catch (err) {
+                console.error("Redis meeting delete error:", err.message || err);
+            }
+        }
+
         console.log(`Meeting Updated: ${meeting.title} (${meeting.meetingCode})`);
 
         res.json({
@@ -221,6 +285,15 @@ router.delete('/:id', authenticateToken, async (req, res) => {
         }
 
         await Meeting.findByIdAndDelete(id);
+
+        // Invalidate Redis meeting details cache
+        if (isRedisConnected) {
+            try {
+                await redisClient.del(`meeting:${meeting.meetingCode}`);
+            } catch (err) {
+                console.error("Redis meeting delete error:", err.message || err);
+            }
+        }
 
         console.log(`Meeting Deleted: ${meeting.title} (${meeting.meetingCode})`);
 

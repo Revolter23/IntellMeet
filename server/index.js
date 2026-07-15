@@ -6,6 +6,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import rateLimit from 'express-rate-limit';
 import main from './database/mongodb.js'; // Ensure database starts up as well
+import redisClient, { isRedisConnected } from './database/redis.js';
 
 import AuthRoutes from './routes/AuthRoutes.js';
 import MeetingRoutes from './routes/MeetingRoutes.js';
@@ -45,21 +46,32 @@ const io = new Server(httpServer, {
     }
 });
 
-// In-memory mappings to track participant sessions in meeting rooms
-const socketToRoom = {}; // socket.id -> meetingCode
-const socketToUser = {}; // socket.id -> User object
+// Fallback in-memory mappings if Redis is down
+const localSocketToRoom = {};
+const localSocketToUser = {};
 
 // 3. Set up event handlers for socket connection
 io.on('connection', (socket) => {
     console.log(`User connected: ${socket.id}`);
 
     // Join Room handler: adds user to the room, notifies existing peers, and returns list of current peers
-    socket.on('join-room', ({ meetingCode, user }) => {
+    socket.on('join-room', async ({ meetingCode, user }) => {
         if (!meetingCode || !user) return;
         
         socket.join(meetingCode);
-        socketToRoom[socket.id] = meetingCode;
-        socketToUser[socket.id] = user;
+        if (isRedisConnected) {
+            try {
+                await redisClient.hSet('socketToRoom', socket.id, meetingCode);
+                await redisClient.hSet('socketToUser', socket.id, JSON.stringify(user));
+            } catch (err) {
+                console.error("Redis socket set error:", err);
+                localSocketToRoom[socket.id] = meetingCode;
+                localSocketToUser[socket.id] = user;
+            }
+        } else {
+            localSocketToRoom[socket.id] = meetingCode;
+            localSocketToUser[socket.id] = user;
+        }
 
         console.log(`User ${user.email} (${socket.id}) joined meeting: ${meetingCode}`);
 
@@ -75,10 +87,37 @@ io.on('connection', (socket) => {
         if (clients) {
             for (const clientId of clients) {
                 if (clientId !== socket.id) {
-                    usersInRoom.push({
-                        socketId: clientId,
-                        user: socketToUser[clientId]
-                    });
+                    if (isRedisConnected) {
+                        try {
+                            const clientUserData = await redisClient.hGet('socketToUser', clientId);
+                            if (clientUserData) {
+                                usersInRoom.push({
+                                    socketId: clientId,
+                                    user: JSON.parse(clientUserData)
+                                });
+                            } else if (localSocketToUser[clientId]) {
+                                usersInRoom.push({
+                                    socketId: clientId,
+                                    user: localSocketToUser[clientId]
+                                });
+                            }
+                        } catch (err) {
+                            console.error("Redis socket get error:", err);
+                            if (localSocketToUser[clientId]) {
+                                usersInRoom.push({
+                                    socketId: clientId,
+                                    user: localSocketToUser[clientId]
+                                });
+                            }
+                        }
+                    } else {
+                        if (localSocketToUser[clientId]) {
+                            usersInRoom.push({
+                                socketId: clientId,
+                                user: localSocketToUser[clientId]
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -88,11 +127,24 @@ io.on('connection', (socket) => {
     });
 
     // WebRTC Offer: relay from caller to target socket
-    socket.on('offer', ({ to, offer }) => {
+    socket.on('offer', async ({ to, offer }) => {
+        let user = null;
+        if (isRedisConnected) {
+            try {
+                const clientUserData = await redisClient.hGet('socketToUser', socket.id);
+                user = clientUserData ? JSON.parse(clientUserData) : localSocketToUser[socket.id];
+            } catch (err) {
+                console.error("Redis socket get error in offer:", err);
+                user = localSocketToUser[socket.id];
+            }
+        } else {
+            user = localSocketToUser[socket.id];
+        }
+
         io.to(to).emit('offer', {
             from: socket.id,
             offer: offer,
-            user: socketToUser[socket.id]
+            user: user || null
         });
     });
 
@@ -113,8 +165,19 @@ io.on('connection', (socket) => {
     });
 
     // Media State Toggle: relay camera/mic toggling events for UI indicators
-    socket.on('toggle-media', ({ isAudioMuted, isVideoMuted }) => {
-        const meetingCode = socketToRoom[socket.id];
+    socket.on('toggle-media', async ({ isAudioMuted, isVideoMuted }) => {
+        let meetingCode = null;
+        if (isRedisConnected) {
+            try {
+                meetingCode = await redisClient.hGet('socketToRoom', socket.id);
+            } catch (err) {
+                console.error("Redis socket get error in toggle-media:", err);
+                meetingCode = localSocketToRoom[socket.id];
+            }
+        } else {
+            meetingCode = localSocketToRoom[socket.id];
+        }
+
         if (meetingCode) {
             socket.to(meetingCode).emit('user-media-toggled', {
                 socketId: socket.id,
@@ -125,17 +188,42 @@ io.on('connection', (socket) => {
     });
 
     // Handle user disconnect
-    socket.on('disconnect', () => {
-        const room = socketToRoom[socket.id];
-        const user = socketToUser[socket.id];
+    socket.on('disconnect', async () => {
+        let room = null;
+        let user = null;
+
+        if (isRedisConnected) {
+            try {
+                room = await redisClient.hGet('socketToRoom', socket.id);
+                const userJson = await redisClient.hGet('socketToUser', socket.id);
+                user = userJson ? JSON.parse(userJson) : localSocketToUser[socket.id];
+
+                if (room) {
+                    await redisClient.hDel('socketToRoom', socket.id);
+                }
+                if (user) {
+                    await redisClient.hDel('socketToUser', socket.id);
+                }
+            } catch (err) {
+                console.error("Redis socket disconnect error:", err);
+                room = localSocketToRoom[socket.id];
+                user = localSocketToUser[socket.id];
+                delete localSocketToRoom[socket.id];
+                delete localSocketToUser[socket.id];
+            }
+        } else {
+            room = localSocketToRoom[socket.id];
+            user = localSocketToUser[socket.id];
+            delete localSocketToRoom[socket.id];
+            delete localSocketToUser[socket.id];
+        }
+
         if (room) {
             // Notify other participants in the meeting room that the user left
             socket.to(room).emit('user-left', socket.id);
-            delete socketToRoom[socket.id];
         }
         if (user) {
             console.log(`User ${user.email} (${socket.id}) disconnected`);
-            delete socketToUser[socket.id];
         } else {
             console.log(`Socket disconnected: ${socket.id}`);
         }

@@ -1,4 +1,5 @@
 import { User } from '../models/UserModel.js';
+import redisClient, { isRedisConnected } from '../database/redis.js';
 
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
@@ -274,6 +275,16 @@ router.put('/profile', authenticateToken, async (req, res) => {
         }
 
         await user.save();
+
+        // Invalidate Redis session cache for this user
+        if (isRedisConnected) {
+            try {
+                const cacheKey = `user:${user.id}`;
+                await redisClient.del(cacheKey);
+            } catch (err) {
+                console.error("Redis session delete error:", err.message || err);
+            }
+        }
 
         console.log("Profile Updated: ", user.avatar);
         res.json({
