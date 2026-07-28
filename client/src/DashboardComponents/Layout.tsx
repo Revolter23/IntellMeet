@@ -11,10 +11,16 @@ import {
 	BellIcon
 } from "../lib/icons"
 
+import { useState } from "react"
+import { useNotification } from "../context/NotificationContext"
+
 export default function Layout() {
 	const navigate = useNavigate()
 	const location = useLocation()
 	const { user, clearAuth } = useAuthStore()
+	const { notifications, unreadCount, markAllAsRead, clearNotifications } = useNotification()
+	const [showNotificationMenu, setShowNotificationMenu] = useState(false)
+
 
 	const getInitials = (name?: string) => {
 		if (!name) return "U";
@@ -149,10 +155,74 @@ export default function Layout() {
 						</div>
 
 						{/* Notification Bell */}
-						<button className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-900/50 rounded-xl transition-all cursor-pointer relative">
-							<BellIcon />
-							<span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-indigo-500" />
-						</button>
+						<div className="relative">
+							<button
+								onClick={() => {
+									setShowNotificationMenu(!showNotificationMenu)
+									if (!showNotificationMenu) markAllAsRead()
+								}}
+								className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-900/50 rounded-xl transition-all cursor-pointer relative"
+								title="Notifications"
+							>
+								<BellIcon />
+								{unreadCount > 0 && (
+									<span className="absolute top-1 right-1 h-4 w-4 rounded-full bg-indigo-500 text-white text-[10px] font-bold flex items-center justify-center border border-slate-950 animate-pulse">
+										{unreadCount}
+									</span>
+								)}
+							</button>
+
+							{/* Notifications Dropdown Panel */}
+							{showNotificationMenu && (
+								<div className="absolute right-0 mt-3 w-80 sm:w-96 rounded-2xl border border-slate-900 bg-slate-950/95 backdrop-blur-xl shadow-2xl z-50 overflow-hidden font-sans">
+									<div className="p-4 border-b border-slate-900 flex items-center justify-between">
+										<div className="flex items-center gap-2">
+											<h3 className="font-bold text-xs text-slate-200 uppercase tracking-wider">Notifications</h3>
+											{notifications.length > 0 && (
+												<span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+													{notifications.length}
+												</span>
+											)}
+										</div>
+										{notifications.length > 0 && (
+											<button
+												onClick={clearNotifications}
+												className="text-[11px] text-slate-500 hover:text-rose-400 transition-colors"
+											>
+												Clear All
+											</button>
+										)}
+									</div>
+
+									{/* List */}
+									<div className="max-h-80 overflow-y-auto p-3 space-y-2">
+										{notifications.length === 0 ? (
+											<div className="py-8 text-center text-slate-500">
+												<p className="text-xs">No notifications yet</p>
+												<p className="text-[11px] text-slate-600 mt-1">Real-time alerts will appear here</p>
+											</div>
+										) : (
+											notifications.map((item) => (
+												<div
+													key={item.id}
+													className="p-3 rounded-xl bg-slate-900/40 border border-slate-850 hover:bg-slate-900/70 transition-all flex items-start gap-3"
+												>
+													<div className="mt-0.5 h-2 w-2 rounded-full bg-indigo-500 shrink-0" />
+													<div className="overflow-hidden flex-1">
+														<div className="flex items-center justify-between">
+															<span className="text-xs font-semibold text-slate-200 truncate">{item.title}</span>
+															<span className="text-[10px] text-slate-500">{item.timestamp}</span>
+														</div>
+														<p className="text-xs text-slate-400 mt-0.5 leading-relaxed">{item.message}</p>
+													</div>
+												</div>
+											))
+										)}
+									</div>
+								</div>
+							)}
+						</div>
+
 					</div>
 				</header>
 

@@ -84,8 +84,9 @@ export default function Dashboard() {
 		return date.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })
 	}
 
-	const upcomingMeetings = [
+	const upcomingMeetings: any[] = [
 	]
+
 
 	return (
 		<>

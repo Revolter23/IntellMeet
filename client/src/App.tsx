@@ -8,6 +8,9 @@ import Profile from './DashboardComponents/Profile'
 import Layout from './DashboardComponents/Layout'
 import MeetingRoom from './DashboardComponents/MeetingRoom'
 import { useAuthStore } from './store/useAuthStore'
+import { NotificationProvider } from './context/NotificationContext'
+import ToastContainer from './components/ToastContainer'
+
 
 function Home() {
   const { accessToken, user } = useAuthStore()
@@ -76,6 +79,7 @@ function PublicRoute({ children }: RouteGuardProps) {
 }
 
 function App() {
+
   const { isCheckingAuth, checkAuth } = useAuthStore()
 
   useEffect(() => {
@@ -108,45 +112,49 @@ function App() {
   }
 
   return (
-    <Routes>
-      <Route path="/" element={<Home />} />
+    <NotificationProvider>
+      <ToastContainer />
+      <Routes>
+        <Route path="/" element={<Home />} />
 
-      <Route
-        path="/login"
-        element={
-          <PublicRoute>
-            <Login />
-          </PublicRoute>
-        }
-      />
-      <Route
-        path="/signup"
-        element={
-          <PublicRoute>
-            <SignUp />
-          </PublicRoute>
-        }
-      />
-      <Route
-        element={
-          <ProtectedRoute>
-            <Layout />
-          </ProtectedRoute>
-        }
-      >
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/profile" element={<Profile />} />
-      </Route>
-      <Route
-        path="/meetings/:meetingCode"
-        element={
-          <ProtectedRoute>
-            <MeetingRoom />
-          </ProtectedRoute>
-        }
-      />
-    </Routes>
+        <Route
+          path="/login"
+          element={
+            <PublicRoute>
+              <Login />
+            </PublicRoute>
+          }
+        />
+        <Route
+          path="/signup"
+          element={
+            <PublicRoute>
+              <SignUp />
+            </PublicRoute>
+          }
+        />
+        <Route
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/profile" element={<Profile />} />
+        </Route>
+        <Route
+          path="/meetings/:meetingCode"
+          element={
+            <ProtectedRoute>
+              <MeetingRoom />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </NotificationProvider>
   )
 }
 
 export default App;
+

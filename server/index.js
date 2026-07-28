@@ -38,13 +38,36 @@ app.use("/meetings", MeetingRoutes);
 // 1. Wrap the express application in an HTTP server
 const httpServer = createServer(app);
 
-// 2. Initialize Socket.io and allow CORS from your React client (typically on port 5173)
+// 2. Initialize Socket.io with optimized real-time configurations
 const io = new Server(httpServer, {
     cors: {
-        origin: "http://localhost:5173",
-        methods: ["GET", "POST"]
+        origin: process.env.CLIENT_URL || "http://localhost:5173",
+        methods: ["GET", "POST"],
+        credentials: true
+    },
+    // Heartbeat tuning for rapid detection of dropped WebRTC peers
+    pingInterval: 10000, // Send ping every 10s
+    pingTimeout: 5000,   // Disconnect if no pong received within 5s
+    // Prioritize WebSocket transport for ultra-low latency signaling
+    transports: ['websocket', 'polling'],
+    // Allow up to 10 MB payload buffer size
+    maxHttpBufferSize: 1e7,
+    // Enable connection state recovery for brief client disconnections
+    connectionStateRecovery: {
+        maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes
+        skipMiddlewares: true
     }
 });
+
+// Handshake middleware to attach user metadata if provided in auth payload
+io.use((socket, next) => {
+    const authUser = socket.handshake.auth?.user;
+    if (authUser) {
+        socket.data.user = authUser;
+    }
+    next();
+});
+
 
 // Fallback in-memory mappings if Redis is down
 const localSocketToRoom = {};
@@ -80,6 +103,17 @@ io.on('connection', (socket) => {
             socketId: socket.id,
             user: user
         });
+
+        // Broadcast real-time notification to room participants
+        socket.to(meetingCode).emit('receive-notification', {
+            id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
+            type: 'user-joined',
+            title: 'Participant Joined',
+            message: `${user.name || user.email} joined the meeting`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            user: user
+        });
+
 
         // Collect other active users in this room
         const clients = io.sockets.adapter.rooms.get(meetingCode);
@@ -187,6 +221,59 @@ io.on('connection', (socket) => {
         }
     });
 
+    // In-Meeting Chat: Broadcast chat messages to all participants in the meeting room
+    socket.on('send-message', async ({ text }) => {
+        if (!text || !text.trim()) return;
+
+        let meetingCode = null;
+        let senderUser = null;
+
+        if (isRedisConnected) {
+            try {
+                meetingCode = await redisClient.hGet('socketToRoom', socket.id);
+                const userJson = await redisClient.hGet('socketToUser', socket.id);
+                senderUser = userJson ? JSON.parse(userJson) : localSocketToUser[socket.id];
+            } catch (err) {
+                console.error("Redis socket get error in send-message:", err);
+                meetingCode = localSocketToRoom[socket.id];
+                senderUser = localSocketToUser[socket.id];
+            }
+        } else {
+            meetingCode = localSocketToRoom[socket.id];
+            senderUser = localSocketToUser[socket.id];
+        }
+
+        if (meetingCode && senderUser) {
+            const messageData = {
+                id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
+                senderSocketId: socket.id,
+                senderName: senderUser.name || 'Participant',
+                senderAvatar: senderUser.avatar,
+                senderId: senderUser.id,
+                text: text.trim(),
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+
+            // Broadcast message to everyone in the room (including sender)
+            io.in(meetingCode).emit('receive-message', messageData);
+        }
+    });
+
+    // Custom notification event: Relay custom real-time notification to a meeting room
+    socket.on('send-notification', async ({ meetingCode, type, title, message }) => {
+        if (!meetingCode || !title || !message) return;
+
+        const notificationPayload = {
+            id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
+            type: type || 'info',
+            title: title,
+            message: message,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+
+        socket.to(meetingCode).emit('receive-notification', notificationPayload);
+    });
+
     // Handle user disconnect
     socket.on('disconnect', async () => {
         let room = null;
@@ -221,6 +308,15 @@ io.on('connection', (socket) => {
         if (room) {
             // Notify other participants in the meeting room that the user left
             socket.to(room).emit('user-left', socket.id);
+
+            // Broadcast real-time notification
+            socket.to(room).emit('receive-notification', {
+                id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
+                type: 'user-left',
+                title: 'Participant Left',
+                message: `${user ? (user.name || user.email) : 'A participant'} left the meeting`,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
         }
         if (user) {
             console.log(`User ${user.email} (${socket.id}) disconnected`);
@@ -228,6 +324,7 @@ io.on('connection', (socket) => {
             console.log(`Socket disconnected: ${socket.id}`);
         }
     });
+
 });
 
 // 4. Run the httpServer instead of app.listen

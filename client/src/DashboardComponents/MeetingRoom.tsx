@@ -10,8 +10,12 @@ import {
 	CopyIcon,
 	CheckIcon,
 	SparklesIcon,
-	WarningIcon
+	WarningIcon,
+	ChatIcon,
+	SendIcon
 } from "../lib/icons"
+
+import { useNotification } from "../context/NotificationContext"
 
 interface User {
 	id: string;
@@ -20,12 +24,23 @@ interface User {
 	avatar?: string;
 }
 
+
 interface RemotePeer {
 	socketId: string;
 	user: User;
 	stream?: MediaStream;
 	isAudioMuted: boolean;
 	isVideoMuted: boolean;
+}
+
+interface ChatMessage {
+	id: string;
+	senderSocketId: string;
+	senderName: string;
+	senderAvatar?: string;
+	senderId?: string;
+	text: string;
+	timestamp: string;
 }
 
 const ICE_SERVERS = {
@@ -40,6 +55,8 @@ export default function MeetingRoom() {
 	const { meetingCode } = useParams<{ meetingCode: string }>()
 	const navigate = useNavigate()
 	const { user } = useAuthStore()
+	const { addNotification } = useNotification()
+
 
 	// UI States
 	const [meetingTitle, setMeetingTitle] = useState("Loading...")
@@ -47,6 +64,29 @@ export default function MeetingRoom() {
 	const [error, setError] = useState<string | null>(null)
 	const [copied, setCopied] = useState(false)
 	const [showParticipants, setShowParticipants] = useState(false)
+
+	// Chat States & Refs
+	const [showChat, setShowChat] = useState(false)
+	const [messages, setMessages] = useState<ChatMessage[]>([])
+	const [newMessageText, setNewMessageText] = useState("")
+	const [unreadCount, setUnreadCount] = useState(0)
+	const chatBottomRef = useRef<HTMLDivElement | null>(null)
+	const showChatRef = useRef(showChat)
+
+	// Sync showChatRef and reset unread count when chat panel is opened
+	useEffect(() => {
+		showChatRef.current = showChat
+		if (showChat) {
+			setUnreadCount(0)
+		}
+	}, [showChat])
+
+	// Auto-scroll to bottom of chat when new messages arrive or panel opens
+	useEffect(() => {
+		if (showChat && chatBottomRef.current) {
+			chatBottomRef.current.scrollIntoView({ behavior: "smooth" })
+		}
+	}, [messages, showChat])
 
 	// Media States
 	const [localStream, setLocalStream] = useState<MediaStream | null>(null)
@@ -62,6 +102,15 @@ export default function MeetingRoom() {
 
 	// Remote Peers State
 	const [remotePeers, setRemotePeers] = useState<RemotePeer[]>([])
+
+	// Send message handler
+	const handleSendMessage = (e: React.FormEvent) => {
+		e.preventDefault()
+		if (!newMessageText.trim() || !socketRef.current) return;
+		socketRef.current.emit("send-message", { text: newMessageText.trim() })
+		setNewMessageText("")
+	}
+
 
 	// Parse initial camera / microphone parameters from URL query
 	useEffect(() => {
@@ -277,6 +326,33 @@ export default function MeetingRoom() {
 						return p;
 					}))
 				})
+
+				// Event: Receive Chat Message
+				socketRef.current.on("receive-message", (msg: ChatMessage) => {
+					setMessages(prev => [...prev, msg])
+					if (!showChatRef.current) {
+						setUnreadCount(prev => prev + 1)
+						addNotification({
+							type: 'info',
+							title: `Message from ${msg.senderName}`,
+							message: msg.text,
+							timestamp: msg.timestamp
+						})
+					}
+				})
+
+				// Event: Receive Real-Time System / Room Notification
+				socketRef.current.on("receive-notification", (notif: { id?: string; type?: any; title: string; message: string; timestamp?: string }) => {
+					addNotification({
+						id: notif.id,
+						type: notif.type || 'info',
+						title: notif.title,
+						message: notif.message,
+						timestamp: notif.timestamp
+					})
+				})
+
+
 
 			} catch (err) {
 				console.error("Error initializing camera/signaling:", err)
@@ -522,13 +598,36 @@ export default function MeetingRoom() {
 
 					{/* Participants Count Toggle */}
 					<button
-						onClick={() => setShowParticipants(!showParticipants)}
+						onClick={() => {
+							setShowParticipants(!showParticipants)
+							if (!showParticipants) setShowChat(false)
+						}}
 						className={`px-3 py-1 text-xs font-medium rounded-xl border transition-all cursor-pointer ${showParticipants
 								? "bg-indigo-600/10 border-indigo-500/30 text-indigo-400"
 								: "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
 							}`}
 					>
 						People ({totalParticipants})
+					</button>
+
+					{/* Chat Panel Toggle */}
+					<button
+						onClick={() => {
+							setShowChat(!showChat)
+							if (!showChat) setShowParticipants(false)
+						}}
+						className={`relative px-3 py-1 text-xs font-medium rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${showChat
+								? "bg-indigo-600/10 border-indigo-500/30 text-indigo-400"
+								: "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
+							}`}
+					>
+						<ChatIcon size={14} />
+						<span>Chat</span>
+						{unreadCount > 0 && (
+							<span className="h-4 w-4 rounded-full bg-indigo-500 text-white text-[10px] font-bold flex items-center justify-center animate-pulse">
+								{unreadCount}
+							</span>
+						)}
 					</button>
 				</div>
 			</header>
@@ -628,6 +727,80 @@ export default function MeetingRoom() {
 						</div>
 					</aside>
 				)}
+
+				{/* Collapsible Right Sidebar: In-Meeting Chat */}
+				{showChat && (
+					<aside className="w-80 sm:w-96 border-l border-slate-900 bg-slate-950/90 backdrop-blur-xl flex flex-col z-20 shadow-2xl">
+						<div className="p-4 border-b border-slate-900 flex items-center justify-between">
+							<div>
+								<h3 className="font-bold text-sm text-slate-200">In-Meeting Chat</h3>
+								<p className="text-[11px] text-slate-500">Messages are visible to everyone</p>
+							</div>
+							<button
+								onClick={() => setShowChat(false)}
+								className="text-slate-400 hover:text-slate-200 text-xs px-2 py-1 rounded-lg hover:bg-slate-900 transition-colors"
+							>
+								✕
+							</button>
+						</div>
+
+						{/* Message History List */}
+						<div className="flex-1 overflow-y-auto p-4 space-y-3.5">
+							{messages.length === 0 ? (
+								<div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500">
+									<ChatIcon size={32} className="opacity-30 mb-2" />
+									<p className="text-xs font-medium text-slate-400">No messages yet</p>
+									<p className="text-[11px] text-slate-600 mt-1">Send a message to start chatting with participants</p>
+								</div>
+							) : (
+								messages.map((msg) => {
+									const isMe = socketRef.current && msg.senderSocketId === socketRef.current.id;
+									return (
+										<div
+											key={msg.id}
+											className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
+										>
+											<div className="flex items-center gap-1.5 mb-1">
+												<span className="text-[11px] font-semibold text-slate-400">
+													{isMe ? "You" : msg.senderName}
+												</span>
+												<span className="text-[10px] text-slate-600">{msg.timestamp}</span>
+											</div>
+											<div
+												className={`px-3 py-2 rounded-2xl text-xs max-w-[85%] break-words shadow-sm ${isMe
+														? "bg-indigo-600 text-white rounded-tr-none"
+														: "bg-slate-900 border border-slate-800 text-slate-200 rounded-tl-none"
+													}`}
+											>
+												{msg.text}
+											</div>
+										</div>
+									)
+								})
+							)}
+							<div ref={chatBottomRef} />
+						</div>
+
+						{/* Message Input Form */}
+						<form onSubmit={handleSendMessage} className="p-3 border-t border-slate-900 bg-slate-950 flex items-center gap-2">
+							<input
+								type="text"
+								value={newMessageText}
+								onChange={(e) => setNewMessageText(e.target.value)}
+								placeholder="Type a message..."
+								className="flex-1 bg-slate-900 border border-slate-800 focus:border-indigo-500 focus:outline-none text-xs text-slate-100 placeholder-slate-500 rounded-xl px-3 py-2.5 transition-all"
+							/>
+							<button
+								type="submit"
+								disabled={!newMessageText.trim()}
+								className="p-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 text-white rounded-xl transition-all cursor-pointer shadow-md flex items-center justify-center"
+								title="Send Message"
+							>
+								<SendIcon size={16} />
+							</button>
+						</form>
+					</aside>
+				)}
 			</div>
 
 			{/* Bottom Controls Bar */}
@@ -669,6 +842,27 @@ export default function MeetingRoom() {
 					>
 						<ScreenShareIcon size={20} />
 					</button>
+
+					{/* Chat Toggle Button (Bottom Toolbar) */}
+					<button
+						onClick={() => {
+							setShowChat(!showChat)
+							if (!showChat) setShowParticipants(false)
+						}}
+						className={`relative p-3 rounded-full border transition-all cursor-pointer shadow-md ${showChat
+								? "bg-indigo-600/20 border-indigo-500/40 text-indigo-400 hover:bg-indigo-600/30"
+								: "bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-850"
+							}`}
+						title="In-Meeting Chat"
+					>
+						<ChatIcon size={20} />
+						{unreadCount > 0 && (
+							<span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-indigo-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-slate-950 animate-pulse">
+								{unreadCount}
+							</span>
+						)}
+					</button>
+
 
 					{/* Copy Invite (Mobile fallback trigger) */}
 					<button
