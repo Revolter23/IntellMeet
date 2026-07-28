@@ -234,4 +234,34 @@ export const SendIcon = (props: React.SVGProps<SVGSVGElement> & { size?: number 
   </svg>
 )
 
+export const RecordIcon = (props: React.SVGProps<SVGSVGElement> & { size?: number }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    viewBox="0 0 24 24"
+    strokeWidth={1.5}
+    stroke="currentColor"
+    className={props.className}
+    style={{ width: props.size || 20, height: props.size || 20 }}
+  >
+    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
+    <circle cx="12" cy="12" r="5" fill="currentColor" />
+  </svg>
+)
+
+export const StopRecordIcon = (props: React.SVGProps<SVGSVGElement> & { size?: number }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    fill="none"
+    viewBox="0 0 24 24"
+    strokeWidth={1.5}
+    stroke="currentColor"
+    className={props.className}
+    style={{ width: props.size || 20, height: props.size || 20 }}
+  >
+    <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
+  </svg>
+)
+
+
 

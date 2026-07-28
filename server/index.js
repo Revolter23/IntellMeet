@@ -274,7 +274,126 @@ io.on('connection', (socket) => {
         socket.to(meetingCode).emit('receive-notification', notificationPayload);
     });
 
+    // Screen Share Toggle: relay screen sharing state to room participants
+    socket.on('screen-share-toggled', async ({ isScreenSharing }) => {
+        let meetingCode = null;
+        let senderUser = null;
+
+        if (isRedisConnected) {
+            try {
+                meetingCode = await redisClient.hGet('socketToRoom', socket.id);
+                const userJson = await redisClient.hGet('socketToUser', socket.id);
+                senderUser = userJson ? JSON.parse(userJson) : localSocketToUser[socket.id];
+            } catch (err) {
+                meetingCode = localSocketToRoom[socket.id];
+                senderUser = localSocketToUser[socket.id];
+            }
+        } else {
+            meetingCode = localSocketToRoom[socket.id];
+            senderUser = localSocketToUser[socket.id];
+        }
+
+        if (meetingCode) {
+            socket.to(meetingCode).emit('user-screen-toggled', {
+                socketId: socket.id,
+                isScreenSharing
+            });
+
+            // Broadcast real-time toast alert
+            const userName = senderUser ? (senderUser.name || senderUser.email) : 'A participant';
+            socket.to(meetingCode).emit('receive-notification', {
+                id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
+                type: 'info',
+                title: isScreenSharing ? 'Screen Sharing Started' : 'Screen Sharing Stopped',
+                message: isScreenSharing ? `${userName} started sharing their screen` : `${userName} stopped screen sharing`,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+        }
+    });
+
+    // Recording Toggle: relay recording status alert to meeting room
+    socket.on('recording-toggled', async ({ isRecording }) => {
+        let meetingCode = null;
+        let senderUser = null;
+
+        if (isRedisConnected) {
+            try {
+                meetingCode = await redisClient.hGet('socketToRoom', socket.id);
+                const userJson = await redisClient.hGet('socketToUser', socket.id);
+                senderUser = userJson ? JSON.parse(userJson) : localSocketToUser[socket.id];
+            } catch (err) {
+                meetingCode = localSocketToRoom[socket.id];
+                senderUser = localSocketToUser[socket.id];
+            }
+        } else {
+            meetingCode = localSocketToRoom[socket.id];
+            senderUser = localSocketToUser[socket.id];
+        }
+
+        if (meetingCode) {
+            const userName = senderUser ? (senderUser.name || senderUser.email) : 'A participant';
+            socket.to(meetingCode).emit('receive-notification', {
+                id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
+                type: isRecording ? 'warning' : 'info',
+                title: isRecording ? 'Meeting Recording Started' : 'Meeting Recording Stopped',
+                message: isRecording ? `${userName} started recording this call` : `${userName} stopped recording`,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+        }
+    });
+
+    // Typing Indicators: Relay typing events to room participants
+    socket.on('typing-start', async () => {
+        let meetingCode = null;
+        let senderUser = null;
+
+        if (isRedisConnected) {
+            try {
+                meetingCode = await redisClient.hGet('socketToRoom', socket.id);
+                const userJson = await redisClient.hGet('socketToUser', socket.id);
+                senderUser = userJson ? JSON.parse(userJson) : localSocketToUser[socket.id];
+            } catch (err) {
+                meetingCode = localSocketToRoom[socket.id];
+                senderUser = localSocketToUser[socket.id];
+            }
+        } else {
+            meetingCode = localSocketToRoom[socket.id];
+            senderUser = localSocketToUser[socket.id];
+        }
+
+        if (meetingCode && senderUser) {
+            socket.to(meetingCode).emit('user-typing', {
+                socketId: socket.id,
+                userName: senderUser.name || 'Participant',
+                isTyping: true
+            });
+        }
+    });
+
+    socket.on('typing-stop', async () => {
+        let meetingCode = null;
+
+        if (isRedisConnected) {
+            try {
+                meetingCode = await redisClient.hGet('socketToRoom', socket.id);
+            } catch (err) {
+                meetingCode = localSocketToRoom[socket.id];
+            }
+        } else {
+            meetingCode = localSocketToRoom[socket.id];
+        }
+
+        if (meetingCode) {
+            socket.to(meetingCode).emit('user-typing', {
+                socketId: socket.id,
+                isTyping: false
+            });
+        }
+    });
+
+
     // Handle user disconnect
+
     socket.on('disconnect', async () => {
         let room = null;
         let user = null;

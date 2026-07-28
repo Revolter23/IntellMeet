@@ -12,7 +12,9 @@ import {
 	SparklesIcon,
 	WarningIcon,
 	ChatIcon,
-	SendIcon
+	SendIcon,
+	RecordIcon,
+	StopRecordIcon
 } from "../lib/icons"
 
 import { useNotification } from "../context/NotificationContext"
@@ -24,14 +26,15 @@ interface User {
 	avatar?: string;
 }
 
-
 interface RemotePeer {
 	socketId: string;
 	user: User;
 	stream?: MediaStream;
 	isAudioMuted: boolean;
 	isVideoMuted: boolean;
+	isScreenSharing?: boolean;
 }
+
 
 interface ChatMessage {
 	id: string;
@@ -70,8 +73,10 @@ export default function MeetingRoom() {
 	const [messages, setMessages] = useState<ChatMessage[]>([])
 	const [newMessageText, setNewMessageText] = useState("")
 	const [unreadCount, setUnreadCount] = useState(0)
+	const [typingUsers, setTypingUsers] = useState<{ [socketId: string]: string }>({})
 	const chatBottomRef = useRef<HTMLDivElement | null>(null)
 	const showChatRef = useRef(showChat)
+	const typingTimeoutRef = useRef<any>(null)
 
 	// Sync showChatRef and reset unread count when chat panel is opened
 	useEffect(() => {
@@ -94,6 +99,31 @@ export default function MeetingRoom() {
 	const [isVideoMuted, setIsVideoMuted] = useState(false)
 	const [isScreenSharing, setIsScreenSharing] = useState(false)
 
+	// Recording States & References
+	const [isRecording, setIsRecording] = useState(false)
+	const [recordingTime, setRecordingTime] = useState(0)
+	const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+	const recordedChunksRef = useRef<Blob[]>([])
+
+	// Recording timer effect
+	useEffect(() => {
+		let timer: any;
+		if (isRecording) {
+			timer = setInterval(() => {
+				setRecordingTime(prev => prev + 1);
+			}, 1000);
+		} else {
+			setRecordingTime(0);
+		}
+		return () => clearInterval(timer);
+	}, [isRecording]);
+
+	const formatRecordingTime = (totalSeconds: number) => {
+		const mins = Math.floor(totalSeconds / 60);
+		const secs = totalSeconds % 60;
+		return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+	};
+
 	// WebRTC / Socket References
 	const socketRef = useRef<any>(null)
 	const localStreamRef = useRef<MediaStream | null>(null)
@@ -103,13 +133,120 @@ export default function MeetingRoom() {
 	// Remote Peers State
 	const [remotePeers, setRemotePeers] = useState<RemotePeer[]>([])
 
+	// Handle input change and emit typing status
+	const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		setNewMessageText(e.target.value)
+
+		if (socketRef.current) {
+			socketRef.current.emit("typing-start")
+
+			if (typingTimeoutRef.current) {
+				clearTimeout(typingTimeoutRef.current)
+			}
+
+			typingTimeoutRef.current = setTimeout(() => {
+				socketRef.current?.emit("typing-stop")
+			}, 2500)
+		}
+	}
+
 	// Send message handler
 	const handleSendMessage = (e: React.FormEvent) => {
 		e.preventDefault()
 		if (!newMessageText.trim() || !socketRef.current) return;
 		socketRef.current.emit("send-message", { text: newMessageText.trim() })
+		socketRef.current.emit("typing-stop")
+		if (typingTimeoutRef.current) {
+			clearTimeout(typingTimeoutRef.current)
+		}
 		setNewMessageText("")
 	}
+
+
+	// Action: Toggle Meeting Recording
+	const handleToggleRecording = () => {
+		if (isRecording) {
+			if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+				mediaRecorderRef.current.stop();
+			}
+			setIsRecording(false);
+			socketRef.current?.emit("recording-toggled", { isRecording: false });
+		} else {
+			try {
+				const combinedStream = new MediaStream();
+
+				// Add audio tracks (local mic + remote audio tracks)
+				if (localStreamRef.current) {
+					localStreamRef.current.getAudioTracks().forEach(track => combinedStream.addTrack(track));
+				}
+				remotePeers.forEach(peer => {
+					if (peer.stream) {
+						peer.stream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
+					}
+				});
+
+				// Add video track (screen share stream or local video stream)
+				if (isScreenSharing && screenStreamRef.current) {
+					screenStreamRef.current.getVideoTracks().forEach(track => combinedStream.addTrack(track));
+				} else if (localStreamRef.current && localStreamRef.current.getVideoTracks().length > 0) {
+					localStreamRef.current.getVideoTracks().forEach(track => combinedStream.addTrack(track));
+				}
+
+				const options = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
+					? { mimeType: "video/webm;codecs=vp9,opus" }
+					: MediaRecorder.isTypeSupported("video/webm")
+					? { mimeType: "video/webm" }
+					: {};
+
+				const recorder = new MediaRecorder(combinedStream, options);
+				recordedChunksRef.current = [];
+
+				recorder.ondataavailable = (event) => {
+					if (event.data && event.data.size > 0) {
+						recordedChunksRef.current.push(event.data);
+					}
+				};
+
+				recorder.onstop = () => {
+					const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
+					const url = URL.createObjectURL(blob);
+					const a = document.createElement("a");
+					a.style.display = "none";
+					a.href = url;
+					a.download = `IntellMeet-Recording-${meetingCode || 'room'}-${Date.now()}.webm`;
+					document.body.appendChild(a);
+					a.click();
+					setTimeout(() => {
+						document.body.removeChild(a);
+						URL.revokeObjectURL(url);
+					}, 100);
+					addNotification({
+						type: 'success',
+						title: 'Recording Downloaded',
+						message: 'Your meeting recording has been saved to your downloads.'
+					});
+				};
+
+				recorder.start(1000);
+				mediaRecorderRef.current = recorder;
+				setIsRecording(true);
+				socketRef.current?.emit("recording-toggled", { isRecording: true });
+				addNotification({
+					type: 'warning',
+					title: 'Recording Started',
+					message: 'Meeting recording is now active.'
+				});
+			} catch (err) {
+				console.error("Failed to start recording:", err);
+				addNotification({
+					type: 'error',
+					title: 'Recording Error',
+					message: 'Could not capture media streams for recording.'
+				});
+			}
+		}
+	}
+
 
 
 	// Parse initial camera / microphone parameters from URL query
@@ -306,6 +443,11 @@ export default function MeetingRoom() {
 						delete peersRef.current[socketId]
 					}
 					setRemotePeers(prev => prev.filter(p => p.socketId !== socketId))
+					setTypingUsers(prev => {
+						const updated = { ...prev }
+						delete updated[socketId]
+						return updated
+					})
 				})
 
 				// Event: User Joined (Notifies existing peers that metadata is ready)
@@ -326,6 +468,31 @@ export default function MeetingRoom() {
 						return p;
 					}))
 				})
+
+				// Event: Remote user toggled screen sharing
+				socketRef.current.on("user-screen-toggled", ({ socketId, isScreenSharing: screenSharing }: { socketId: string; isScreenSharing: boolean }) => {
+					setRemotePeers(prev => prev.map(p => {
+						if (p.socketId === socketId) {
+							return { ...p, isScreenSharing: screenSharing }
+						}
+						return p;
+					}))
+				})
+
+				// Event: Remote user typing status
+				socketRef.current.on("user-typing", ({ socketId, userName, isTyping }: { socketId: string; userName?: string; isTyping: boolean }) => {
+					setTypingUsers(prev => {
+						const updated = { ...prev }
+						if (isTyping && userName) {
+							updated[socketId] = userName
+						} else {
+							delete updated[socketId]
+						}
+						return updated
+					})
+				})
+
+
 
 				// Event: Receive Chat Message
 				socketRef.current.on("receive-message", (msg: ChatMessage) => {
@@ -474,6 +641,7 @@ export default function MeetingRoom() {
 				}
 
 				setIsScreenSharing(true)
+				socketRef.current?.emit("screen-share-toggled", { isScreenSharing: true })
 			} catch (err) {
 				console.error("Error launching screen share:", err)
 			}
@@ -500,7 +668,9 @@ export default function MeetingRoom() {
 		}
 
 		setIsScreenSharing(false)
+		socketRef.current?.emit("screen-share-toggled", { isScreenSharing: false })
 	}
+
 
 	// Action: Copy invitation link
 	const copyInviteLink = () => {
@@ -584,6 +754,14 @@ export default function MeetingRoom() {
 				</div>
 
 				<div className="flex items-center gap-3">
+					{/* Live Recording Badge */}
+					{isRecording && (
+						<div className="flex items-center gap-2 px-3 py-1 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs font-semibold text-rose-400 animate-pulse">
+							<span className="h-2 w-2 rounded-full bg-rose-500" />
+							<span>REC {formatRecordingTime(recordingTime)}</span>
+						</div>
+					)}
+
 					{/* Meeting Code Badge */}
 					<div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-slate-900/60 border border-slate-800 rounded-xl">
 						<span className="text-xs text-slate-400 font-mono select-all">{meetingCode}</span>
@@ -595,6 +773,7 @@ export default function MeetingRoom() {
 							{copied ? <CheckIcon className="text-emerald-400" size={14} /> : <CopyIcon size={14} />}
 						</button>
 					</div>
+
 
 					{/* Participants Count Toggle */}
 					<button
@@ -781,12 +960,26 @@ export default function MeetingRoom() {
 							<div ref={chatBottomRef} />
 						</div>
 
+						{/* Typing Indicator Banner */}
+						{Object.keys(typingUsers).length > 0 && (
+							<div className="px-4 py-1.5 bg-slate-900/60 border-t border-slate-900 flex items-center gap-2 text-[11px] text-indigo-400 font-medium tracking-wide">
+								<div className="flex items-center gap-1">
+									<span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-bounce [animation-delay:-0.3s]" />
+									<span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-bounce [animation-delay:-0.15s]" />
+									<span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-bounce" />
+								</div>
+								<span className="truncate">
+									{Object.values(typingUsers).join(", ")} {Object.keys(typingUsers).length === 1 ? "is typing..." : "are typing..."}
+								</span>
+							</div>
+						)}
+
 						{/* Message Input Form */}
 						<form onSubmit={handleSendMessage} className="p-3 border-t border-slate-900 bg-slate-950 flex items-center gap-2">
 							<input
 								type="text"
 								value={newMessageText}
-								onChange={(e) => setNewMessageText(e.target.value)}
+								onChange={handleInputChange}
 								placeholder="Type a message..."
 								className="flex-1 bg-slate-900 border border-slate-800 focus:border-indigo-500 focus:outline-none text-xs text-slate-100 placeholder-slate-500 rounded-xl px-3 py-2.5 transition-all"
 							/>
@@ -799,6 +992,7 @@ export default function MeetingRoom() {
 								<SendIcon size={16} />
 							</button>
 						</form>
+
 					</aside>
 				)}
 			</div>
@@ -842,6 +1036,19 @@ export default function MeetingRoom() {
 					>
 						<ScreenShareIcon size={20} />
 					</button>
+
+					{/* Record Meeting Button */}
+					<button
+						onClick={handleToggleRecording}
+						className={`p-3 rounded-full border transition-all cursor-pointer shadow-md relative ${isRecording
+								? "bg-rose-500/20 border-rose-500/40 text-rose-400 hover:bg-rose-500/30 animate-pulse"
+								: "bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-850"
+							}`}
+						title={isRecording ? `Stop Recording (${formatRecordingTime(recordingTime)})` : "Record Meeting"}
+					>
+						{isRecording ? <StopRecordIcon size={20} /> : <RecordIcon size={20} />}
+					</button>
+
 
 					{/* Chat Toggle Button (Bottom Toolbar) */}
 					<button
