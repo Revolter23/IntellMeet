@@ -1,7 +1,13 @@
 import express from 'express';
+import multer from 'multer';
 import { Meeting } from '../models/MeetingModel.js';
 import { authenticateToken } from '../middleware/auth.js';
 import redisClient, { isRedisConnected } from '../database/redis.js';
+import { uploadRecordingToS3, getS3PresignedUploadUrl } from '../services/s3Service.js';
+import { autoProcessMeetingAI } from '../services/aiService.js';
+
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage, limits: { fileSize: 500 * 1024 * 1024 } });
 
 const router = express.Router();
 
@@ -301,6 +307,62 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Error deleting meeting:', error);
         res.status(500).json({ message: 'Internal server error deleting meeting' });
+    }
+});
+
+/**
+ * @route   GET /meetings/:meetingCode/s3-presigned-url
+ * @desc    Generate a presigned S3 upload URL for direct client-side recording upload
+ * @access  Private
+ */
+router.get('/:meetingCode/s3-presigned-url', authenticateToken, async (req, res) => {
+    try {
+        const { meetingCode } = req.params;
+        const mimeType = req.query.mimeType || 'video/webm';
+
+        const presignedData = await getS3PresignedUploadUrl(meetingCode, mimeType);
+        res.status(200).json(presignedData);
+    } catch (error) {
+        console.error('Error generating S3 presigned URL:', error);
+        res.status(500).json({ message: error.message || 'Internal server error generating S3 upload URL' });
+    }
+});
+
+/**
+ * @route   POST /meetings/:meetingCode/recording
+ * @desc    Save uploaded recording S3 URL & trigger AI pipeline
+ * @access  Private
+ */
+router.post('/:meetingCode/recording', authenticateToken, async (req, res) => {
+    try {
+        const { meetingCode } = req.params;
+        const { recordingUrl } = req.body;
+
+        if (!recordingUrl) {
+            return res.status(400).json({ message: 'No recording URL provided' });
+        }
+
+        // Update meeting document in MongoDB
+        const meeting = await Meeting.findOne({ meetingCode });
+        if (!meeting) {
+            return res.status(404).json({ message: 'Meeting not found' });
+        }
+
+        meeting.recordingUrl = recordingUrl;
+        await meeting.save();
+
+        // Automatically trigger AI processing pipeline in background
+        autoProcessMeetingAI(meetingCode, recordingUrl).catch(err => {
+            console.error("Background AI processing failed:", err);
+        });
+
+        res.status(200).json({
+            message: 'Recording saved to Amazon S3 successfully. AI processing started.',
+            recordingUrl
+        });
+    } catch (error) {
+        console.error('Error saving recording URL:', error);
+        res.status(500).json({ message: error.message || 'Internal server error saving recording URL' });
     }
 });
 

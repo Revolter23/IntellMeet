@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import { useParams, useNavigate } from "react-router"
+import axios from "axios"
 import { io } from "socket.io-client"
 import { useAuthStore } from "../store/useAuthStore"
 import { api } from "../lib/api"
@@ -63,6 +64,7 @@ export default function MeetingRoom() {
 
 	// UI States
 	const [meetingTitle, setMeetingTitle] = useState("Loading...")
+	const [meeting, setMeeting] = useState<any>(null)
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState<string | null>(null)
 	const [copied, setCopied] = useState(false)
@@ -207,7 +209,7 @@ export default function MeetingRoom() {
 					}
 				};
 
-				recorder.onstop = () => {
+				recorder.onstop = async () => {
 					const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
 					const url = URL.createObjectURL(blob);
 					const a = document.createElement("a");
@@ -220,11 +222,45 @@ export default function MeetingRoom() {
 						document.body.removeChild(a);
 						URL.revokeObjectURL(url);
 					}, 100);
+
 					addNotification({
-						type: 'success',
-						title: 'Recording Downloaded',
-						message: 'Your meeting recording has been saved to your downloads.'
+						type: 'info',
+						title: 'Uploading to S3...',
+						message: 'Uploading recording directly to Amazon S3 & starting AI processing.'
 					});
+
+					try {
+						// Step 1: Request S3 presigned upload URL from backend
+						const presignedRes = await api.get(`/meetings/${meetingCode}/s3-presigned-url`, {
+							params: { mimeType: blob.type || 'video/webm' }
+						});
+						const { uploadUrl, s3Url } = presignedRes.data;
+
+						// Step 2: Upload recording blob directly from browser to AWS S3
+						await axios.put(uploadUrl, blob, {
+							headers: {
+								'Content-Type': blob.type || 'video/webm'
+							}
+						});
+
+						// Step 3: Notify backend to update MongoDB document & trigger AI processing
+						await api.post(`/meetings/${meetingCode}/recording`, {
+							recordingUrl: s3Url
+						});
+
+						addNotification({
+							type: 'success',
+							title: 'Recording Uploaded',
+							message: 'Recording saved to Amazon S3. AI transcript & summary will be generated automatically.'
+						});
+					} catch (uploadErr) {
+						console.error("Error uploading recording to S3:", uploadErr);
+						addNotification({
+							type: 'error',
+							title: 'S3 Upload Notice',
+							message: 'Could not upload recording to S3. Please ensure AWS credentials are set in server/.env.'
+						});
+					}
 				};
 
 				recorder.start(1000);
@@ -262,6 +298,7 @@ export default function MeetingRoom() {
 			try {
 				const res = await api.get(`/meetings/${meetingCode}`)
 				setMeetingTitle(res.data.meeting.title)
+				setMeeting(res.data.meeting)
 				setLoading(false)
 			} catch (err: any) {
 				console.error("Meeting verification failed:", err)
@@ -688,7 +725,29 @@ export default function MeetingRoom() {
 		if (screenStreamRef.current) {
 			screenStreamRef.current.getTracks().forEach(track => track.stop())
 		}
-		navigate("/dashboard")
+		navigate(`/meetings/history/${meetingCode}`)
+	}
+
+	// Action: End meeting for everyone (Host only)
+	const handleEndMeetingForAll = async () => {
+		try {
+			if (localStreamRef.current) {
+				localStreamRef.current.getTracks().forEach(track => track.stop())
+			}
+			if (screenStreamRef.current) {
+				screenStreamRef.current.getTracks().forEach(track => track.stop())
+			}
+			if (meeting) {
+				await api.put(`/meetings/${meeting._id}`, {
+					status: 'completed',
+					endTime: new Date().toISOString()
+				})
+			}
+		} catch (err) {
+			console.error("Error ending meeting:", err)
+		} finally {
+			navigate(`/meetings/history/${meetingCode}`)
+		}
 	}
 
 	// Render Loading State
@@ -1083,22 +1142,49 @@ export default function MeetingRoom() {
 						{copied ? <CheckIcon size={20} /> : <CopyIcon size={20} />}
 					</button>
 
-					{/* End Call / Hang Up Button */}
-					<button
-						onClick={handleLeaveMeeting}
-						className="px-6 py-3 bg-rose-600 hover:bg-rose-500 active:scale-[0.98] text-white font-semibold rounded-full border border-rose-500/20 transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-rose-600/20"
-						title="Leave Call"
-					>
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							fill="currentColor"
-							viewBox="0 0 24 24"
-							className="h-5 w-5"
+					{/* End Call / Hang Up Buttons */}
+					{meeting && user && (meeting.host?._id === user.id || meeting.host === user.id || meeting.host?.id === user.id) ? (
+						<>
+							<button
+								onClick={handleLeaveMeeting}
+								className="px-5 py-3 bg-slate-900 border border-slate-800 hover:bg-slate-800 hover:border-slate-700 active:scale-[0.98] text-slate-300 font-semibold rounded-full transition-all flex items-center gap-2 cursor-pointer shadow-md"
+								title="Leave Room (Keep Call Active)"
+							>
+								<span className="text-sm">Leave Room</span>
+							</button>
+							<button
+								onClick={handleEndMeetingForAll}
+								className="px-6 py-3 bg-rose-600 hover:bg-rose-500 active:scale-[0.98] text-white font-semibold rounded-full border border-rose-500/20 transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-rose-600/20"
+								title="End Meeting for All Participants"
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									fill="currentColor"
+									viewBox="0 0 24 24"
+									className="h-5 w-5"
+								>
+									<path d="M21 16.5c0 .38-.21.71-.53.88l-3.37 2c-.32.19-.72.16-1.02-.07l-2.01-1.5c-.32-.24-.47-.64-.38-1.03l.63-2.61c.09-.37-.02-.76-.3-1.04-1.25-1.25-2.73-2.26-4.37-3-.28-.13-.61-.13-.88 0-1.64.74-3.12 1.75-4.37 3-.28.28-.39.67-.3 1.04l.63 2.61c.09.39-.06.79-.38 1.03l-2.01 1.5c-.3.23-.7.26-1.02.07l-3.37-2c-.32-.17-.53-.5-.53-.88 0-.55.45-1 1-1 3.51 0 6.82-1.37 9.3-3.69l1.45-1.45c.39-.39 1.02-.39 1.41 0l1.45 1.45c2.48 2.32 5.79 3.69 9.3 3.69.55 0 1 .45 1 1z" />
+								</svg>
+								<span className="text-sm">End for All</span>
+							</button>
+						</>
+					) : (
+						<button
+							onClick={handleLeaveMeeting}
+							className="px-6 py-3 bg-rose-600 hover:bg-rose-500 active:scale-[0.98] text-white font-semibold rounded-full border border-rose-500/20 transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-rose-600/20"
+							title="Leave Call"
 						>
-							<path d="M21 16.5c0 .38-.21.71-.53.88l-3.37 2c-.32.19-.72.16-1.02-.07l-2.01-1.5c-.32-.24-.47-.64-.38-1.03l.63-2.61c.09-.37-.02-.76-.3-1.04-1.25-1.25-2.73-2.26-4.37-3-.28-.13-.61-.13-.88 0-1.64.74-3.12 1.75-4.37 3-.28.28-.39.67-.3 1.04l.63 2.61c.09.39-.06.79-.38 1.03l-2.01 1.5c-.3.23-.7.26-1.02.07l-3.37-2c-.32-.17-.53-.5-.53-.88 0-.55.45-1 1-1 3.51 0 6.82-1.37 9.3-3.69l1.45-1.45c.39-.39 1.02-.39 1.41 0l1.45 1.45c2.48 2.32 5.79 3.69 9.3 3.69.55 0 1 .45 1 1z" />
-						</svg>
-						<span className="hidden sm:inline text-sm">Leave Meeting</span>
-					</button>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								fill="currentColor"
+								viewBox="0 0 24 24"
+								className="h-5 w-5"
+							>
+								<path d="M21 16.5c0 .38-.21.71-.53.88l-3.37 2c-.32.19-.72.16-1.02-.07l-2.01-1.5c-.32-.24-.47-.64-.38-1.03l.63-2.61c.09-.37-.02-.76-.3-1.04-1.25-1.25-2.73-2.26-4.37-3-.28-.13-.61-.13-.88 0-1.64.74-3.12 1.75-4.37 3-.28.28-.39.67-.3 1.04l.63 2.61c.09.39-.06.79-.38 1.03l-2.01 1.5c-.3.23-.7.26-1.02.07l-3.37-2c-.32-.17-.53-.5-.53-.88 0-.55.45-1 1-1 3.51 0 6.82-1.37 9.3-3.69l1.45-1.45c.39-.39 1.02-.39 1.41 0l1.45 1.45c2.48 2.32 5.79 3.69 9.3 3.69.55 0 1 .45 1 1z" />
+							</svg>
+							<span className="hidden sm:inline text-sm">Leave Meeting</span>
+						</button>
+					)}
 
 				</div>
 			</footer>

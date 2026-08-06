@@ -10,6 +10,11 @@ import redisClient, { isRedisConnected } from './database/redis.js';
 
 import AuthRoutes from './routes/AuthRoutes.js';
 import MeetingRoutes from './routes/MeetingRoutes.js';
+import AdminRoutes from './routes/AdminRoutes.js';
+import WorkspaceRoutes from './routes/WorkspaceRoutes.js';
+import BoardRoutes from './routes/BoardRoutes.js';
+import NotificationRoutes from './routes/NotificationRoutes.js';
+import { parseAndNotifyMentions } from './services/notificationService.js';
 
 const globalLimiter = rateLimit({
     windowMs: 10 * 60 * 1000, // 10 minutes
@@ -30,10 +35,14 @@ app.use(helmet());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-main()
+main();
 
 app.use("/auth", AuthRoutes);
 app.use("/meetings", MeetingRoutes);
+app.use("/api/admin", AdminRoutes);
+app.use("/api/workspaces", WorkspaceRoutes);
+app.use("/api/boards", BoardRoutes);
+app.use("/api/notifications", NotificationRoutes);
 
 // 1. Wrap the express application in an HTTP server
 const httpServer = createServer(app);
@@ -59,6 +68,9 @@ const io = new Server(httpServer, {
     }
 });
 
+// Expose io instance to Express request handlers
+app.set('io', io);
+
 // Handshake middleware to attach user metadata if provided in auth payload
 io.use((socket, next) => {
     const authUser = socket.handshake.auth?.user;
@@ -76,6 +88,28 @@ const localSocketToUser = {};
 // 3. Set up event handlers for socket connection
 io.on('connection', (socket) => {
     console.log(`User connected: ${socket.id}`);
+
+    // Personal user notification room subscription
+    socket.on('join-user-room', (userId) => {
+        if (userId) {
+            socket.join(`user:${userId}`);
+            console.log(`Socket ${socket.id} joined personal user room: user:${userId}`);
+        }
+    });
+
+    // Board room subscription
+    socket.on('join:board', (boardId) => {
+        if (boardId) {
+            socket.join(`board:${boardId}`);
+            console.log(`Socket ${socket.id} joined board room: board:${boardId}`);
+        }
+    });
+
+    socket.on('leave:board', (boardId) => {
+        if (boardId) {
+            socket.leave(`board:${boardId}`);
+        }
+    });
 
     // Join Room handler: adds user to the room, notifies existing peers, and returns list of current peers
     socket.on('join-room', async ({ meetingCode, user }) => {
@@ -256,6 +290,14 @@ io.on('connection', (socket) => {
 
             // Broadcast message to everyone in the room (including sender)
             io.in(meetingCode).emit('receive-message', messageData);
+
+            // Parse and notify @mentions in chat text
+            parseAndNotifyMentions(io, {
+                text: text.trim(),
+                senderUser,
+                contextTitle: `Meeting ${meetingCode}`,
+                link: `/meetings/history/${meetingCode}`
+            });
         }
     });
 

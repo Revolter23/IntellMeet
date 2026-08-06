@@ -29,6 +29,10 @@ const ActionItemSchema = new Schema({
         type: Schema.Types.ObjectId,
         ref: 'User'
     },
+    assigneeName: {
+        type: String,
+        default: ""
+    },
     status: {
         type: String,
         enum: ['pending', 'completed'],
@@ -41,6 +45,10 @@ const TranscriptSegmentSchema = new Schema({
     speaker: {
         type: Schema.Types.ObjectId,
         ref: 'User'
+    },
+    speakerName: {
+        type: String,
+        default: "Speaker"
     },
     text: {
         type: String,

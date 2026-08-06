@@ -6,6 +6,7 @@ export interface User {
   email: string;
   name?: string;
   avatar?: string;
+  systemRole?: 'SUPER_ADMIN' | 'PLATFORM_ADMIN' | 'MEDIA_MANAGER' | 'PLATFORM_USER';
 }
 
 interface AuthState {

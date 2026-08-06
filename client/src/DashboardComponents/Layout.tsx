@@ -42,7 +42,17 @@ export default function Layout() {
 		}
 	}
 
-	const activeTab = location.pathname === "/profile" ? "profile" : "home"
+	const activeTab = location.pathname.startsWith("/meetings/history")
+		? "mymeetings"
+		: location.pathname === "/profile"
+		? "profile"
+		: location.pathname === "/admin"
+		? "admin"
+		: location.pathname === "/workspace"
+		? "workspace"
+		: location.pathname === "/workspace/board"
+		? "board"
+		: "home"
 
 	return (
 		<div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
@@ -64,7 +74,7 @@ export default function Layout() {
 				</div>
 
 				{/* Navigation Items */}
-				<nav className="flex-1 px-4 py-6 space-y-1">
+				<nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
 					<Link
 						to="/dashboard"
 						className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
@@ -77,12 +87,58 @@ export default function Layout() {
 						Home Dashboard
 					</Link>
 
-					<button
-						className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 transition-all duration-200"
+					<Link
+						to="/meetings/history"
+						className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
+							activeTab === "mymeetings"
+								? "bg-slate-900 text-indigo-400 shadow-inner"
+								: "text-slate-400 hover:text-slate-200 hover:bg-slate-900/40"
+						}`}
 					>
-						<VideoIcon className="text-slate-400" />
+						<VideoIcon className={activeTab === "mymeetings" ? "text-indigo-400" : "text-slate-400"} />
 						My Meetings
-					</button>
+					</Link>
+
+					{/* Team Workspace Navigation */}
+					<Link
+						to="/workspace"
+						className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
+							activeTab === "workspace"
+								? "bg-slate-900 text-violet-400 shadow-inner"
+								: "text-slate-400 hover:text-slate-200 hover:bg-slate-900/40"
+						}`}
+					>
+						<span className="text-base">🏢</span>
+						Team Workspace
+					</Link>
+
+					{/* Kanban Project Board Navigation */}
+					<Link
+						to="/workspace/board"
+						className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
+							activeTab === "board"
+								? "bg-slate-900 text-emerald-400 shadow-inner"
+								: "text-slate-400 hover:text-slate-200 hover:bg-slate-900/40"
+						}`}
+					>
+						<span className="text-base">📋</span>
+						Project Board
+					</Link>
+
+					{/* System Admin Panel link ONLY visible for System Super Admin role */}
+					{user?.systemRole === 'SUPER_ADMIN' && (
+						<Link
+							to="/admin"
+							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 border border-indigo-500/20 ${
+								activeTab === "admin"
+									? "bg-indigo-600/20 text-indigo-300 shadow-inner"
+									: "bg-indigo-600/10 text-indigo-400 hover:bg-indigo-600/20 hover:text-indigo-200"
+							}`}
+						>
+							<span className="text-base">🛡️</span>
+							Admin Panel
+						</Link>
+					)}
 
 					<button
 						className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 transition-all duration-200"
@@ -178,20 +234,30 @@ export default function Layout() {
 									<div className="p-4 border-b border-slate-900 flex items-center justify-between">
 										<div className="flex items-center gap-2">
 											<h3 className="font-bold text-xs text-slate-200 uppercase tracking-wider">Notifications</h3>
-											{notifications.length > 0 && (
+											{unreadCount > 0 && (
 												<span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-													{notifications.length}
+													{unreadCount} unread
 												</span>
 											)}
 										</div>
-										{notifications.length > 0 && (
-											<button
-												onClick={clearNotifications}
-												className="text-[11px] text-slate-500 hover:text-rose-400 transition-colors"
-											>
-												Clear All
-											</button>
-										)}
+										<div className="flex items-center gap-3">
+											{unreadCount > 0 && (
+												<button
+													onClick={markAllAsRead}
+													className="text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors font-medium"
+												>
+													Mark Read
+												</button>
+											)}
+											{notifications.length > 0 && (
+												<button
+													onClick={clearNotifications}
+													className="text-[11px] text-slate-500 hover:text-rose-400 transition-colors"
+												>
+													Clear All
+												</button>
+											)}
+										</div>
 									</div>
 
 									{/* List */}
@@ -199,19 +265,34 @@ export default function Layout() {
 										{notifications.length === 0 ? (
 											<div className="py-8 text-center text-slate-500">
 												<p className="text-xs">No notifications yet</p>
-												<p className="text-[11px] text-slate-600 mt-1">Real-time alerts will appear here</p>
+												<p className="text-[11px] text-slate-600 mt-1">Real-time alerts for mentions & action items will appear here</p>
 											</div>
 										) : (
 											notifications.map((item) => (
 												<div
 													key={item.id}
-													className="p-3 rounded-xl bg-slate-900/40 border border-slate-850 hover:bg-slate-900/70 transition-all flex items-start gap-3"
+													onClick={() => {
+														if (item.link) {
+															navigate(item.link);
+															setShowNotificationMenu(false);
+														}
+													}}
+													className={`p-3 rounded-xl border transition-all flex items-start gap-3 cursor-pointer ${
+														item.read 
+															? 'bg-slate-900/30 border-slate-900 opacity-70 hover:opacity-100 hover:bg-slate-900/60' 
+															: 'bg-slate-900/80 border-slate-800 hover:bg-slate-900 shadow-md'
+													}`}
 												>
-													<div className="mt-0.5 h-2 w-2 rounded-full bg-indigo-500 shrink-0" />
+													<div className="mt-0.5 shrink-0 flex items-center justify-center h-6 w-6 rounded-lg text-xs font-bold bg-slate-800">
+														{item.type === 'mention' ? '@' :
+														 item.type === 'action_item' ? '⚡' :
+														 item.type === 'task_assigned' ? '📌' :
+														 item.type === 'user-joined' ? '👤' : 'ℹ️'}
+													</div>
 													<div className="overflow-hidden flex-1">
-														<div className="flex items-center justify-between">
+														<div className="flex items-center justify-between gap-2">
 															<span className="text-xs font-semibold text-slate-200 truncate">{item.title}</span>
-															<span className="text-[10px] text-slate-500">{item.timestamp}</span>
+															<span className="text-[10px] text-slate-500 shrink-0">{item.timestamp}</span>
 														</div>
 														<p className="text-xs text-slate-400 mt-0.5 leading-relaxed">{item.message}</p>
 													</div>

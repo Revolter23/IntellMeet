@@ -85,7 +85,8 @@ router.post('/signup', async (req, res) => {
                 id: newUser.id,
                 email: newUser.email,
                 name: newUser.name,
-                avatar: newUser.avatar
+                avatar: newUser.avatar,
+                systemRole: newUser.systemRole || 'PLATFORM_USER'
             }
         });
     } catch (error) {
@@ -124,7 +125,8 @@ router.post('/login', loginLimiter, async (req, res) => {
                 id: user.id,
                 email: user.email,
                 name: user.name,
-                avatar: user.avatar
+                avatar: user.avatar,
+                systemRole: user.systemRole || 'PLATFORM_USER'
             }
         });
     } catch (error) {
@@ -160,7 +162,8 @@ router.post('/refresh', async (req, res) => {
                 id: user.id,
                 email: user.email,
                 name: user.name,
-                avatar: user.avatar
+                avatar: user.avatar,
+                systemRole: user.systemRole || 'PLATFORM_USER'
             }
         });
     } catch (error) {
@@ -292,7 +295,8 @@ router.put('/profile', authenticateToken, async (req, res) => {
                 id: user.id,
                 email: user.email,
                 name: user.name,
-                avatar: user.avatar
+                avatar: user.avatar,
+                systemRole: user.systemRole || 'PLATFORM_USER'
             }
         });
     } catch (error) {

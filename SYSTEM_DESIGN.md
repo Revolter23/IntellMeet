@@ -96,7 +96,9 @@ sequenceDiagram
 1. **Token Refreshing:** When the access token expires, the client calls `POST /auth/refresh` sending the HTTP-only cookie automatically. The server validates the refresh token, updates the database/cookie if necessary, and issues a new access token.
 2. **Access Protection:** Paths like profile changes are gated behind the [authenticateToken](file:///c:/Web%20Programmes/IntellMeet/server/middleware/auth.js) middleware.
 
-### B. Cloudinary Secure Media Uploads
+### B. Secure Direct Media Uploads
+
+#### 1. Cloudinary Profile Pictures
 To prevent exposing Cloudinary secret keys to the frontend, uploads are completed using **Secure Signatures**:
 
 ```mermaid
@@ -113,6 +115,26 @@ sequenceDiagram
     Client->>Cloudinary: POST upload (Image file + Signature + Parameters)
     Cloudinary-->>Client: Returns Secure URL & Public ID
     Client->>Server: PUT /auth/profile { avatar: Secure URL }
+```
+
+#### 2. Amazon S3 Recorded Meetings
+To prevent routing large video streams through the Express server, recorded meeting WebM files are uploaded directly from the browser using **AWS S3 Presigned URLs**:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as React Client
+    participant Server as Express Server
+    participant S3 as Amazon S3 Bucket
+
+    Client->>Server: GET /meetings/:meetingCode/s3-presigned-url
+    Note over Server: Formats key: IntellMeet_Recordings/{YYYY}/{MM}/{code}/rec_{ts}_{id}.webm
+    Server->>Server: Sign PutObjectCommand using AWS Credentials (expires 15m)
+    Server-->>Client: Returns { uploadUrl, s3Url, key }
+    Client->>S3: PUT uploadUrl (WebM Blob)
+    S3-->>Client: 200 OK
+    Client->>Server: POST /meetings/:meetingCode/recording { recordingUrl }
+    Note over Server: Updates MongoDB & triggers AI processing pipeline
 ```
 
 ### C. Real-time Communication (WebSockets)
