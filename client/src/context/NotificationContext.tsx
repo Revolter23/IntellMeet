@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../store/useAuthStore';
+import { API_BASE_URL } from '../lib/config';
 import { api } from '../lib/api';
 import { io, Socket } from 'socket.io-client';
 
@@ -61,7 +62,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
 		// Initialize socket connection for real-time user notifications
 		if (!socket) {
-			socket = io('http://localhost:3000', { withCredentials: true });
+			socket = io(API_BASE_URL, { withCredentials: true });
 		}
 
 		socket.emit('join-user-room', user.id);

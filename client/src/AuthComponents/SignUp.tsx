@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button"
 import { MailIcon, LockIcon, EyeIcon, EyeSlashIcon } from "@/lib/icons"
 
 import { useAuthStore } from "../store/useAuthStore"
+import { API_BASE_URL } from "../lib/config"
 
 export default function SignUp() {
   const [showPassword, setShowPassword] = useState(false)
@@ -43,7 +44,7 @@ export default function SignUp() {
         email: data.email,
         password: data.password,
       }
-      const res = await axios.post("http://localhost:3000/auth/signup", payload, {
+      const res = await axios.post(`${API_BASE_URL}/auth/signup`, payload, {
         withCredentials: true,
       })
       console.log("SignUp submitted successfully:", res.data)

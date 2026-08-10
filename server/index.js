@@ -6,7 +6,8 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import rateLimit from 'express-rate-limit';
 import main from './database/mongodb.js'; // Ensure database starts up as well
-import redisClient, { isRedisConnected } from './database/redis.js';
+import { createAdapter } from '@socket.io/redis-adapter';
+import redisClient, { isRedisConnected, pubClient, subClient } from './database/redis.js';
 
 import AuthRoutes from './routes/AuthRoutes.js';
 import MeetingRoutes from './routes/MeetingRoutes.js';
@@ -97,6 +98,16 @@ const io = new Server(httpServer, {
         skipMiddlewares: true
     }
 });
+
+// Attach Redis Adapter to Socket.io for seamless multi-instance horizontal scaling
+if (pubClient && subClient) {
+    try {
+        io.adapter(createAdapter(pubClient, subClient));
+        console.log('⚡ Socket.io Redis Adapter enabled for multi-instance scaling.');
+    } catch (adapterErr) {
+        console.warn('⚠️ Socket.io Redis Adapter setup warning:', adapterErr.message);
+    }
+}
 
 // Expose io instance to Express request handlers
 app.set('io', io);

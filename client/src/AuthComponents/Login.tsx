@@ -15,6 +15,7 @@ import { useNavigate } from "react-router"
 import { MailIcon, LockIcon, EyeIcon, EyeSlashIcon } from "@/lib/icons"
 
 import { useAuthStore } from "../store/useAuthStore"
+import { API_BASE_URL } from "../lib/config"
 
 export default function Login() {
   const navigate = useNavigate()
@@ -36,7 +37,7 @@ export default function Login() {
     setSuccessMessage(null)
 
     try {
-      const res = await axios.post("http://localhost:3000/auth/login", data, {
+      const res = await axios.post(`${API_BASE_URL}/auth/login`, data, {
         withCredentials: true,
       })
       console.log("Login submitted successfully:", res.data)

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import axios from 'axios';
+import { API_BASE_URL } from '../lib/config';
 
 export interface User {
   id: string;
@@ -20,7 +21,7 @@ interface AuthState {
 }
 
 const authAxios = axios.create({
-  baseURL: 'http://localhost:3000/auth',
+  baseURL: `${API_BASE_URL}/auth`,
   withCredentials: true,
 });
 

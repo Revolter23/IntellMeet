@@ -12,12 +12,19 @@ out/
 
 # Environment variables & Secrets
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env*.local
+.env*
+*.env
 /server/.env
+/client/.env
+/client/.env*
+
+# Build Caches & Coverage
+.vite/
+.cache/
+coverage/
+.nyc_output/
+*.tmp
+*.bak
 
 # Debug / Logs
 logs/

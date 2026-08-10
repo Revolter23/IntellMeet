@@ -1,8 +1,9 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/useAuthStore';
+import { API_BASE_URL } from './config';
 
 export const api = axios.create({
-  baseURL: 'http://localhost:3000',
+  baseURL: API_BASE_URL,
   withCredentials: true,
 });
 
@@ -33,7 +34,7 @@ api.interceptors.response.use(
       try {
         // Try refreshing the token using a standard axios instance to avoid interceptor recursion
         const refreshResponse = await axios.post(
-          'http://localhost:3000/auth/refresh',
+          `${API_BASE_URL}/auth/refresh`,
           {},
           { withCredentials: true }
         );

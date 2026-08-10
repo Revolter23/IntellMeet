@@ -7,6 +7,7 @@ import { useWorkspaceStore } from '../store/useWorkspaceStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { io, Socket } from 'socket.io-client';
 import { api } from '../lib/api';
+import { API_BASE_URL } from '../lib/config';
 import { PlusIcon, TrashIcon, SearchIcon } from '../lib/icons';
 
 import { Button } from "@/components/ui/button"
@@ -118,7 +119,7 @@ export default function ProjectBoardView() {
   useEffect(() => {
     if (!board?._id) return;
 
-    socket = io('http://localhost:3000', {
+    socket = io(API_BASE_URL, {
       withCredentials: true,
       transports: ['websocket', 'polling']
     });

@@ -60,16 +60,21 @@ redisClient.on('ready', () => {
     isRedisConnected = true;
 });
 
-redisClient.on('end', () => {
-    isRedisConnected = false;
+const pubClient = redisClient;
+const subClient = pubClient.duplicate();
+
+subClient.on('error', (err) => {
+    // Silent subClient error handler
 });
 
-redisClient.connect().catch((err) => {
+redisClient.connect().then(() => {
+    return subClient.connect();
+}).catch((err) => {
     console.log(`ℹ Redis (${sanitizedUrl}) not running. Operating in in-memory fallback mode.`);
     isRedisConnected = false;
 });
 
-export { isRedisConnected };
+export { isRedisConnected, pubClient, subClient };
 export default redisClient;
 
 

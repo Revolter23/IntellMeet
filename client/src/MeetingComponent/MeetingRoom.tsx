@@ -4,6 +4,7 @@ import axios from "axios"
 import { io } from "socket.io-client"
 import { useAuthStore } from "../store/useAuthStore"
 import { api } from "../lib/api"
+import { API_BASE_URL } from "../lib/config"
 import {
 	VideoIcon,
 	MicIcon,
@@ -346,7 +347,7 @@ export default function MeetingRoom() {
 				setLocalStream(stream)
 				localStreamRef.current = stream;
 
-				socketRef.current = io("http://localhost:3000", {
+				socketRef.current = io(API_BASE_URL, {
 					withCredentials: true,
 					transports: ["websocket", "polling"]
 				})
