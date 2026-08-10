@@ -23,19 +23,49 @@ const globalLimiter = rateLimit({
 });
 
 const app = express();
-const port = 3000;
+const PORT = process.env.PORT || 3000;
 
-app.use(cors({
-    origin: "http://localhost:5173",
+// Enable 'trust proxy' for rate limiting & secure cookies behind reverse proxies (Render, Nginx, Cloudflare)
+app.set('trust proxy', 1);
+
+// Flexible CORS configuration supporting local dev and production domains
+const allowedOrigins = [
+    process.env.CLIENT_URL,
+    'http://localhost:5173'
+].filter(Boolean);
+
+const corsOptions = {
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+            callback(null, true);
+        } else {
+            callback(null, true);
+        }
+    },
     credentials: true
-}));
+};
+
+app.use(cors(corsOptions));
 app.use(globalLimiter);
 app.use(cookieParser());
-app.use(helmet());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(helmet({
+    contentSecurityPolicy: false // Allows WebRTC & Socket.io media streaming
+}));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 main();
+
+// Health Check Endpoint for Render, Docker, and Load Balancers
+app.get('/health', (req, res) => {
+    res.status(200).json({
+        status: 'OK',
+        environment: process.env.NODE_ENV || 'development',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+        redisStatus: isRedisConnected ? 'connected' : 'disconnected'
+    });
+});
 
 app.use("/auth", AuthRoutes);
 app.use("/meetings", MeetingRoutes);
@@ -114,7 +144,7 @@ io.on('connection', (socket) => {
     // Join Room handler: adds user to the room, notifies existing peers, and returns list of current peers
     socket.on('join-room', async ({ meetingCode, user }) => {
         if (!meetingCode || !user) return;
-        
+
         socket.join(meetingCode);
         if (isRedisConnected) {
             try {
@@ -189,7 +219,7 @@ io.on('connection', (socket) => {
                 }
             }
         }
-        
+
         // Send list of all existing users to the joining client
         socket.emit('all-users', usersInRoom);
     });
@@ -488,7 +518,35 @@ io.on('connection', (socket) => {
 
 });
 
-// 4. Run the httpServer instead of app.listen
-httpServer.listen(port, () => {
-    console.log(`Example app listening on port ${port}`);
+// Global Error Handling Middleware
+app.use((err, req, res, next) => {
+    console.error('Unhandled Express Error:', err);
+    res.status(err.status || 500).json({
+        message: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message
+    });
 });
+
+// 4. Run the httpServer on dynamic PORT
+httpServer.listen(PORT, () => {
+    console.log(`🚀 IntellMeet Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+});
+
+// Graceful Shutdown Handler for Render, Docker, and Kubernetes
+const gracefulShutdown = (signal) => {
+    console.log(`Received ${signal}. Shutting down gracefully...`);
+    httpServer.close(async () => {
+        console.log('HTTP & Socket.io server closed.');
+        try {
+            if (redisClient && isRedisConnected) {
+                await redisClient.quit();
+                console.log('Redis connection closed.');
+            }
+        } catch (e) {
+            console.error('Error closing Redis during shutdown:', e);
+        }
+        process.exit(0);
+    });
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
