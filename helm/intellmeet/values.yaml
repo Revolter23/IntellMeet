@@ -1,0 +1,106 @@
+# Default values for intellmeet chart
+
+global:
+  environment: production
+
+# Common ConfigMap values
+config:
+  port: "3000"
+  redisHost: "intellmeet-redis-service"
+  redisPort: "6379"
+  clientUrl: "http://intellmeet.local"
+
+# Sensitive Secret values (Override in production CI/CD)
+secrets:
+  mongooseKey: "mongodb://intellmeet-mongodb-service:27017/intellmeet"
+  jwtSecretKey: "intellmeet_jwt_secret_production_2026"
+  jwtRefreshSecret: "intellmeet_refresh_secret_production_2026"
+
+# Frontend Configuration
+frontend:
+  replicaCount: 2
+  image:
+    repository: intellmeet-client
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+
+# Backend Configuration
+backend:
+  replicaCount: 2
+  image:
+    repository: intellmeet-server
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3000
+  resources:
+    requests:
+      cpu: 150m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# MongoDB Configuration
+mongodb:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: mongo
+    tag: 7-alpine
+    pullPolicy: IfNotPresent
+  persistence:
+    enabled: true
+    storageClass: ""
+    size: 5Gi
+  service:
+    type: ClusterIP
+    port: 27017
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Redis Configuration
+redis:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: redis
+    tag: 7-alpine
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 6379
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+# Ingress Configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  host: "intellmeet.local"
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/websocket-services: "intellmeet-backend-service"
+  tls: []

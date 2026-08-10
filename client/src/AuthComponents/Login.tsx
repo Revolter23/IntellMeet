@@ -68,21 +68,21 @@ export default function Login() {
             name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-slate-300">Email Address</FormLabel>
+                <FormLabel className="text-text-secondary">Email Address</FormLabel>
                 <FormControl>
                   <div className="relative">
-                    <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-500">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-text-muted">
                       <MailIcon />
                     </span>
                     <Input
                       type="email"
                       placeholder="you@example.com"
-                      className="pl-10 bg-slate-950/50 border-slate-800 text-slate-200 placeholder:text-slate-600 focus-visible:border-indigo-500 focus-visible:ring-indigo-500/20"
+                      className="pl-10 bg-bg-input border-border-default text-text-primary placeholder:text-text-subtle focus-visible:border-border-brand focus-visible:ring-border-brand/20"
                       {...field}
                     />
                   </div>
                 </FormControl>
-                <FormMessage className="text-rose-400" />
+                <FormMessage className="text-status-danger" />
               </FormItem>
             )}
           />
@@ -93,29 +93,30 @@ export default function Login() {
             render={({ field }) => (
               <FormItem>
                 <div className="flex items-center justify-between">
-                  <FormLabel className="text-slate-300">Password</FormLabel>
+                  <FormLabel className="text-text-secondary">Password</FormLabel>
                 </div>
                 <FormControl>
                   <div className="relative">
-                    <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-500">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-text-muted">
                       <LockIcon />
                     </span>
                     <Input
                       type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
-                      className="pl-10 pr-10 bg-slate-950/50 border-slate-800 text-slate-200 placeholder:text-slate-600 focus-visible:border-indigo-500 focus-visible:ring-indigo-500/20"
+                      className="pl-10 pr-10 bg-bg-input border-border-default text-text-primary placeholder:text-text-subtle focus-visible:border-border-brand focus-visible:ring-border-brand/20"
                       {...field}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-500 hover:text-slate-300 transition-colors"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-text-muted hover:text-text-primary transition-colors"
                     >
                       {showPassword ? <EyeIcon /> : <EyeSlashIcon />}
                     </button>
                   </div>
                 </FormControl>
-                <FormMessage className="text-rose-400" />
+                <FormMessage className="text-status-danger" />
               </FormItem>
             )}
           />
@@ -123,11 +124,11 @@ export default function Login() {
           <Button
             type="submit"
             disabled={isSubmitting}
-            className="w-full mt-2 h-10 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-medium shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 transition-all duration-300 transform active:scale-[0.98] disabled:opacity-70 disabled:pointer-events-none"
+            className="w-full mt-2 h-10 rounded-xl bg-gradient-to-r from-brand-primary to-brand-secondary hover:from-brand-primary-hover hover:to-brand-secondary text-text-inverse font-medium shadow-lg shadow-brand-primary/20 hover:shadow-brand-primary/30 transition-all duration-300 transform active:scale-[0.98] disabled:opacity-70 disabled:pointer-events-none cursor-pointer"
           >
             {isSubmitting ? (
               <div className="flex items-center justify-center gap-2">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-text-inverse border-t-transparent" />
                 <span>Signing In...</span>
               </div>
             ) : (
@@ -135,7 +136,7 @@ export default function Login() {
             )}
           </Button>
           {successMessage && (
-            <p className="text-center text-sm font-medium text-emerald-400 mt-3">
+            <p className="text-center text-sm font-medium text-status-success mt-3">
               {successMessage}
             </p>
           )}

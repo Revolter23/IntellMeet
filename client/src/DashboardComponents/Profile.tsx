@@ -4,6 +4,11 @@ import { api } from "../lib/api"
 import axios from "axios"
 import { EditIcon, CameraIcon, Spinner, LockIcon as LockedIcon, CheckIcon, WarningIcon } from "../lib/icons"
 
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Card, CardContent } from "@/components/ui/card"
+
 export default function Profile() {
     const { user, updateUser } = useAuthStore()
     const [isEditing, setIsEditing] = useState(false)
@@ -123,17 +128,17 @@ export default function Profile() {
 
     return (
         <div className="w-full">
-            {/* Profile Page Layout */}
-            <div className="relative overflow-hidden rounded-3xl border border-slate-900 bg-slate-950/40 backdrop-blur-xl shadow-2xl">
+            {/* Profile Page Layout using Shadcn Card */}
+            <Card className="relative overflow-hidden rounded-3xl border border-border-default bg-bg-surface shadow-2xl gap-0 p-0">
                 {/* Cover Banner */}
-                <div className="h-48 bg-gradient-to-r from-blue-600 to-violet-600 border-b border-slate-900/60 relative">
-                    <div className="absolute top-6 right-6 px-4 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[11px] font-bold text-indigo-300 uppercase tracking-wider">
+                <div className="h-48 bg-gradient-to-r from-brand-primary to-brand-secondary border-b border-border-subtle relative">
+                    <div className="absolute top-6 right-6 px-4 py-1.5 bg-brand-primary/10 border border-border-brand/20 rounded-full text-[11px] font-bold text-text-brand uppercase tracking-wider">
                         Personal Workspace
                     </div>
                 </div>
 
                 {/* Profile details */}
-                <div className="px-8 pb-10 relative">
+                <CardContent className="px-8 pb-10 relative pt-0">
                     {/* Profile Picture */}
                     {!isEditing ? (
                         <div className="-mt-14 mb-6">
@@ -141,10 +146,10 @@ export default function Profile() {
                                 <img
                                     src={avatarPreview}
                                     alt={user?.name || "Avatar"}
-                                    className="h-28 w-28 rounded-2xl border-2 border-slate-950 bg-slate-900 shadow-xl object-cover shadow-slate-950/50"
+                                    className="h-28 w-28 rounded-2xl border-2 border-bg-surface bg-bg-surface shadow-xl object-cover"
                                 />
                             ) : (
-                                <div className="h-28 w-28 rounded-2xl border-2 border-slate-950 bg-slate-900 shadow-xl shadow-slate-950/50 flex items-center justify-center font-extrabold text-3xl text-indigo-300">
+                                <div className="h-28 w-28 rounded-2xl border-2 border-bg-surface bg-bg-surface shadow-xl flex items-center justify-center font-extrabold text-3xl text-text-brand">
                                     {getInitials(user?.name || user?.email)}
                                 </div>
                             )}
@@ -153,7 +158,7 @@ export default function Profile() {
                         <div className="-mt-14 mb-6 relative inline-block">
                             <div 
                                 onClick={triggerFileInput}
-                                className="cursor-pointer relative overflow-hidden h-28 w-28 rounded-2xl border-2 border-slate-950 bg-slate-900 shadow-xl shadow-slate-950/50 group"
+                                className="cursor-pointer relative overflow-hidden h-28 w-28 rounded-2xl border-2 border-bg-surface bg-bg-surface shadow-xl group"
                                 title="Click to change avatar"
                             >
                                 {avatarPreview ? (
@@ -163,14 +168,14 @@ export default function Profile() {
                                         className="h-28 w-28 object-cover rounded-2xl"
                                     />
                                 ) : (
-                                    <div className="h-28 w-28 bg-slate-900 flex items-center justify-center font-extrabold text-3xl text-indigo-300">
+                                    <div className="h-28 w-28 bg-bg-surface flex items-center justify-center font-extrabold text-3xl text-text-brand">
                                         {getInitials(name || user?.email)}
                                     </div>
                                 )}
                                 {/* Overlay on hover */}
                                 <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                                     <CameraIcon />
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-200 mt-1">Change</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-text-inverse mt-1">Change</span>
                                 </div>
                             </div>
                             <input
@@ -189,37 +194,38 @@ export default function Profile() {
                             <div className="flex justify-between items-start gap-4">
                                 <div className="space-y-1">
                                     {/* User Name as Heading */}
-                                    <h2 className="text-3xl font-extrabold text-white tracking-tight min-h-[2.25rem] truncate max-w-lg">
+                                    <h2 className="text-3xl font-extrabold text-text-primary tracking-tight min-h-[2.25rem] truncate max-w-lg">
                                         {user?.name || ""}
                                     </h2>
                                     {/* User Email as Subheading */}
-                                    <p className="text-sm text-slate-400 font-medium select-all">
+                                    <p className="text-sm text-text-muted font-medium select-all">
                                         {user?.email}
                                     </p>
                                 </div>
-                                <button
+                                <Button
+                                    variant="outline"
                                     onClick={startEditing}
-                                    className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-900 hover:border-slate-800 rounded-xl text-xs font-semibold text-slate-200 hover:bg-slate-850 hover:text-white transition-all shadow-md cursor-pointer"
+                                    className="flex items-center gap-2 px-4 py-2 bg-bg-surface-hover border border-border-default hover:border-border-strong rounded-xl text-xs font-semibold text-text-primary hover:bg-bg-surface transition-all shadow-sm cursor-pointer"
                                 >
                                     <EditIcon />
                                     Edit Profile
-                                </button>
+                                </Button>
                             </div>
                             
                             {success && (
-                                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs rounded-xl flex items-center gap-2">
+                                <div className="p-3 bg-status-success/10 border border-status-success/20 text-status-success text-xs rounded-xl flex items-center gap-2">
                                     <CheckIcon size={16} className="w-4 h-4" />
                                     Profile updated successfully!
                                 </div>
                             )}
 
                             {/* Account Verification Details */}
-                            <div className="pt-6 border-t border-slate-900/60 flex items-center gap-6 text-xs text-slate-500">
+                            <div className="pt-6 border-t border-border-subtle flex items-center gap-6 text-xs text-text-muted">
                                 <div className="flex items-center gap-1.5">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                                    <span className="h-1.5 w-1.5 rounded-full bg-brand-primary animate-pulse" />
                                     <span>Verified Member</span>
                                 </div>
-                                <div className="h-1 w-1 rounded-full bg-slate-800" />
+                                <div className="h-1 w-1 rounded-full bg-border-strong" />
                                 <div>
                                     <span>Role: Owner</span>
                                 </div>
@@ -228,9 +234,9 @@ export default function Profile() {
                     ) : (
                         <form onSubmit={handleSave} className="space-y-6">
                             {error && (
-                                <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-xl flex flex-col gap-1">
+                                <div className="p-3.5 bg-status-danger/10 border border-status-danger/20 text-status-danger text-xs rounded-xl flex flex-col gap-1">
                                     <div className="font-bold flex items-center gap-2">
-                                        <WarningIcon size={16} className="w-4 h-4 text-rose-400" />
+                                        <WarningIcon size={16} className="w-4 h-4 text-status-danger" />
                                         Failed to save changes
                                     </div>
                                     <p className="opacity-90">{error}</p>
@@ -238,61 +244,62 @@ export default function Profile() {
                             )}
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* Name Input */}
+                                {/* Name Input using Shadcn Input & Label */}
                                 <div className="space-y-2">
-                                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Full Name</label>
-                                    <input
+                                    <Label className="text-xs font-semibold text-text-muted uppercase tracking-wider">Full Name</Label>
+                                    <Input
                                         type="text"
                                         value={name}
                                         onChange={(e) => setName(e.target.value)}
                                         placeholder="Enter your name"
                                         required
-                                        className="w-full bg-slate-900/40 border border-slate-900 rounded-xl px-4 py-2.5 text-sm placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:bg-slate-900/60 transition-all text-slate-200"
+                                        className="w-full bg-bg-input border-border-default rounded-xl px-4 py-2.5 text-sm placeholder:text-text-subtle focus-visible:border-border-brand transition-all text-text-primary"
                                     />
                                 </div>
 
-                                {/* Email Input (Readonly) */}
+                                {/* Email Input (Readonly) using Shadcn Input & Label */}
                                 <div className="space-y-2">
                                     <div className="flex items-center justify-between">
-                                        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Email Address</label>
-                                        <div className="flex items-center gap-1 px-2 py-0.5 bg-slate-900 rounded border border-slate-800 text-[10px] text-slate-500 font-bold uppercase tracking-wider select-none">
+                                        <Label className="text-xs font-semibold text-text-muted uppercase tracking-wider">Email Address</Label>
+                                        <div className="flex items-center gap-1 px-2 py-0.5 bg-bg-surface-hover rounded border border-border-subtle text-[10px] text-text-subtle font-bold uppercase tracking-wider select-none">
                                             <LockedIcon />
                                             Read-Only
                                         </div>
                                     </div>
-                                    <input
+                                    <Input
                                         type="email"
                                         value={user?.email || ""}
                                         disabled
-                                        className="w-full bg-slate-900/10 border border-slate-900/30 rounded-xl px-4 py-2.5 text-sm text-slate-500 cursor-not-allowed select-none"
+                                        className="w-full bg-bg-input/50 border-border-subtle rounded-xl px-4 py-2.5 text-sm text-text-subtle cursor-not-allowed select-none"
                                     />
-                                    <p className="text-[11px] text-slate-600 font-medium">Email address modification is currently restricted.</p>
+                                    <p className="text-[11px] text-text-muted font-medium">Email address modification is currently restricted.</p>
                                 </div>
                             </div>
 
                             {/* Buttons */}
-                            <div className="pt-6 border-t border-slate-900/60 flex items-center justify-end gap-3">
-                                <button
+                            <div className="pt-6 border-t border-border-subtle flex items-center justify-end gap-3">
+                                <Button
                                     type="button"
+                                    variant="outline"
                                     onClick={handleCancel}
                                     disabled={loading}
-                                    className="px-5 py-2.5 rounded-xl border border-slate-900 bg-slate-950/40 hover:bg-slate-900 text-slate-400 hover:text-slate-200 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer"
+                                    className="px-5 py-2.5 rounded-xl border border-border-default bg-bg-surface-hover hover:bg-bg-surface text-text-secondary text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer"
                                 >
                                     Cancel
-                                </button>
-                                <button
+                                </Button>
+                                <Button
                                     type="submit"
                                     disabled={loading}
-                                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/20 transition-all disabled:opacity-50 cursor-pointer"
+                                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-brand-primary to-brand-secondary hover:from-brand-primary-hover hover:to-brand-secondary text-text-inverse text-xs font-bold shadow-lg shadow-brand-primary/10 hover:shadow-brand-primary/20 transition-all disabled:opacity-50 cursor-pointer"
                                 >
-                                    {loading && <Spinner className="-ml-1 mr-2 text-white" size={16} />}
+                                    {loading && <Spinner className="-ml-1 mr-2 text-text-inverse" size={16} />}
                                     {loading ? "Saving Changes..." : "Save Changes"}
-                                </button>
+                                </Button>
                             </div>
                         </form>
                     )}
-                </div>
-            </div>
+                </CardContent>
+            </Card>
         </div>
     )
 }

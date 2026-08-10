@@ -1,0 +1,44 @@
+# Production environment overrides for intellmeet chart
+
+global:
+  environment: production
+
+config:
+  clientUrl: "https://intellmeet.com"
+
+frontend:
+  replicaCount: 3
+  image:
+    tag: v1.0.0
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+backend:
+  replicaCount: 3
+  image:
+    tag: v1.0.0
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1024Mi
+
+mongodb:
+  persistence:
+    size: 20Gi
+
+ingress:
+  host: "intellmeet.com"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  tls:
+    - secretName: intellmeet-tls
+      hosts:
+        - intellmeet.com

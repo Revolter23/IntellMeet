@@ -1,0 +1,175 @@
+/* ==========================================================================
+   IntellMeet High-Contrast Theme & Color Design Tokens
+   Default Theme: Midnight Cyberpunk (Dark Mode)
+   ========================================================================== */
+
+:root,
+.dark {
+   /* ----------------------------------------------------------------------
+       1. Brand & Accent Palette (Midnight Cyberpunk Dark Mode)
+       ---------------------------------------------------------------------- */
+   --brand-primary: #818cf8;
+   /* Indigo-400: High contrast electric indigo */
+   --brand-primary-hover: #6366f1;
+   /* Indigo-500 */
+   --brand-primary-light: #a5b4fc;
+   /* Indigo-300 */
+   --brand-primary-glow: rgba(129, 140, 248, 0.35);
+
+   --brand-secondary: #a78bfa;
+   /* Violet-400 */
+   --brand-secondary-hover: #8b5cf6;
+
+   --brand-cyan: #22d3ee;
+   /* Cyan-400 */
+   --brand-emerald: #34d399;
+   /* Emerald-400 */
+
+   /* Gradients */
+   --gradient-brand: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+   --gradient-ai: linear-gradient(135deg, #818cf8 0%, #c084fc 50%, #22d3ee 100%);
+   --gradient-hero: linear-gradient(180deg, rgba(99, 102, 241, 0.22) 0%, rgba(11, 15, 25, 0) 100%);
+
+   /* ----------------------------------------------------------------------
+       2. Layered Surface Elevation (Prevents Flat Dark Bleed)
+       ---------------------------------------------------------------------- */
+   --bg-app: #0b0f19;
+   /* Level 0: Deep Charcoal Blue Canvas */
+   --bg-sidebar: #111827;
+   /* Level 1: Distinct Dark Gray Sidebar */
+   --bg-surface: #1e293b;
+   /* Level 2: Elevated Slate-800 Cards (Clear Contrast!) */
+   --bg-surface-hover: #334155;
+   /* Level 3: Interactive Slate-700 Highlight */
+   --bg-modal: #1e293b;
+   /* Level 3: Modal Container */
+   --bg-dropdown: #243044;
+   /* Level 4: Floating Menus */
+   --bg-input: #151e2e;
+   /* Level 1: Form Inputs */
+   --bg-overlay: rgba(2, 6, 23, 0.85);
+   /* Overlay backdrop */
+
+   /* ----------------------------------------------------------------------
+       3. Crisp Typography (High WCAG Contrast)
+       ---------------------------------------------------------------------- */
+   --text-primary: #f8fafc;
+   /* 98% Bright White Headings */
+   --text-secondary: #e2e8f0;
+   /* 90% Light Slate Body Text */
+   --text-muted: #94a3b8;
+   /* 70% Muted Captions */
+   --text-subtle: #64748b;
+   /* Subtitle/Disabled text */
+   --text-inverse: #0f172a;
+   /* Dark text */
+   --text-brand: #a5b4fc;
+   /* Bright Brand text */
+
+   /* ----------------------------------------------------------------------
+       4. High Definition Borders (Separates UI Components Cleanly)
+       ---------------------------------------------------------------------- */
+   --border-subtle: rgba(255, 255, 255, 0.08);
+   --border-default: rgba(255, 255, 255, 0.16);
+   /* Clear visible container outlines */
+   --border-strong: rgba(255, 255, 255, 0.28);
+   /* Active card borders */
+   --border-brand: #818cf8;
+
+   /* ----------------------------------------------------------------------
+       5. Status & Feedback (Luminous Dark Mode Accents)
+       ---------------------------------------------------------------------- */
+   --status-success: #34d399;
+   --status-success-bg: rgba(52, 211, 153, 0.15);
+   --status-success-border: rgba(52, 211, 153, 0.35);
+
+   --status-warning: #fbbf24;
+   --status-warning-bg: rgba(251, 191, 36, 0.15);
+   --status-warning-border: rgba(251, 191, 36, 0.35);
+
+   --status-danger: #f87171;
+   --status-danger-bg: rgba(248, 113, 113, 0.15);
+   --status-danger-border: rgba(248, 113, 113, 0.35);
+
+   --status-info: #60a5fa;
+   --status-info-bg: rgba(96, 165, 250, 0.15);
+   --status-info-border: rgba(96, 165, 250, 0.35);
+
+   /* ----------------------------------------------------------------------
+       6. Media & Meeting Controls (Dark Mode)
+       ---------------------------------------------------------------------- */
+   --media-mic-active: #334155;
+   --media-mic-muted: #f87171;
+   --media-cam-active: #334155;
+   --media-cam-muted: #f87171;
+   --media-screenshare: #818cf8;
+   --media-recording: #f87171;
+   --media-recording-glow: rgba(248, 113, 113, 0.4);
+   --media-endcall: #f43f5e;
+   --media-endcall-hover: #e11d48;
+
+   /* ----------------------------------------------------------------------
+       7. Project Board & Task Priorities (Dark Mode)
+       ---------------------------------------------------------------------- */
+   --board-backlog: #94a3b8;
+   --board-backlog-bg: rgba(148, 163, 184, 0.15);
+   --board-todo: #60a5fa;
+   --board-todo-bg: rgba(96, 165, 250, 0.15);
+   --board-in-progress: #c084fc;
+   --board-in-progress-bg: rgba(192, 132, 252, 0.15);
+   --board-review: #fbbf24;
+   --board-review-bg: rgba(251, 191, 36, 0.15);
+   --board-done: #34d399;
+   --board-done-bg: rgba(52, 211, 153, 0.15);
+
+   --priority-low: #34d399;
+   --priority-low-bg: rgba(52, 211, 153, 0.15);
+   --priority-medium: #818cf8;
+   --priority-medium-bg: rgba(129, 140, 248, 0.15);
+   --priority-high: #fbbf24;
+   --priority-high-bg: rgba(251, 191, 36, 0.15);
+   --priority-urgent: #f87171;
+   --priority-urgent-bg: rgba(248, 113, 113, 0.15);
+
+   /* ----------------------------------------------------------------------
+       8. Glassmorphism & Shadows (Dark Mode)
+       ---------------------------------------------------------------------- */
+   --glass-bg: rgba(30, 41, 59, 0.85);
+   --glass-border: rgba(255, 255, 255, 0.15);
+   --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
+   --shadow-md: 0 4px 14px 0 rgba(0, 0, 0, 0.35);
+   --shadow-lg: 0 10px 30px 0 rgba(0, 0, 0, 0.5);
+   --shadow-brand: 0 10px 30px -5px rgba(99, 102, 241, 0.45);
+}
+
+/* Optional Light Theme Override */
+.light {
+   --brand-primary: #4f46e5;
+   --brand-primary-hover: #4338ca;
+   --brand-primary-light: #6366f1;
+   --brand-primary-glow: rgba(79, 70, 229, 0.2);
+
+   --brand-secondary: #7c3aed;
+   --brand-secondary-hover: #6d28d9;
+
+   --bg-app: #f1f5f9;
+   --bg-sidebar: #ffffff;
+   --bg-surface: #ffffff;
+   --bg-surface-hover: #f8fafc;
+   --bg-modal: #ffffff;
+   --bg-dropdown: #ffffff;
+   --bg-input: #f8fafc;
+   --bg-overlay: rgba(15, 23, 42, 0.5);
+
+   --text-primary: #0f172a;
+   --text-secondary: #334155;
+   --text-muted: #64748b;
+   --text-subtle: #94a3b8;
+   --text-inverse: #ffffff;
+   --text-brand: #4f46e5;
+
+   --border-subtle: #e2e8f0;
+   --border-default: #cbd5e1;
+   --border-strong: #94a3b8;
+   --border-brand: #4f46e5;
+}

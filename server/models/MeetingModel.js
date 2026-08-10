@@ -87,6 +87,10 @@ const MeetingSchema = new Schema({
         type: Boolean,
         default: false,
     },
+    isInstant: {
+        type: Boolean,
+        default: false,
+    },
     status: {
         type: String,
         enum: ['scheduled', 'active', 'completed', 'cancelled'],

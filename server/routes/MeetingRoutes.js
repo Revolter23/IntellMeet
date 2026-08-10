@@ -1,10 +1,13 @@
 import express from 'express';
 import multer from 'multer';
 import { Meeting } from '../models/MeetingModel.js';
+import { User } from '../models/UserModel.js';
+import { Workspace } from '../models/WorkspaceModel.js';
 import { authenticateToken } from '../middleware/auth.js';
 import redisClient, { isRedisConnected } from '../database/redis.js';
 import { uploadRecordingToS3, getS3PresignedUploadUrl } from '../services/s3Service.js';
 import { autoProcessMeetingAI } from '../services/aiService.js';
+import { createNotification } from '../services/notificationService.js';
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage, limits: { fileSize: 500 * 1024 * 1024 } });
@@ -33,13 +36,36 @@ const getUniqueMeetingCode = async () => {
 };
 
 /**
+ * @route   GET /meetings/users/search
+ * @desc    Search registered users by name or email for scheduling invitations
+ * @access  Private
+ */
+router.get('/users/search', authenticateToken, async (req, res) => {
+    try {
+        const { q } = req.query;
+        if (!q || q.trim().length === 0) {
+            return res.json({ users: [] });
+        }
+        const regex = new RegExp(q.trim(), 'i');
+        const users = await User.find({
+            $or: [{ name: regex }, { email: regex }],
+            _id: { $ne: req.user.id }
+        }, 'name email avatar').limit(10);
+        res.json({ users });
+    } catch (error) {
+        console.error('Error searching users:', error);
+        res.status(500).json({ message: 'Error searching users' });
+    }
+});
+
+/**
  * @route   POST /meetings
- * @desc    Create a new virtual meeting
+ * @desc    Create / schedule a new virtual meeting with individual or team invites and real-time notifications
  * @access  Private
  */
 router.post('/', authenticateToken, async (req, res) => {
     try {
-        const { title, description, startTime, passcode, isPrivate } = req.body;
+        const { title, description, startTime, passcode, isPrivate, invitedUsers, workspaceId, isInstant } = req.body;
 
         if (!title) {
             return res.status(400).json({ message: 'Title is required' });
@@ -51,6 +77,54 @@ router.post('/', authenticateToken, async (req, res) => {
 
         const meetingCode = await getUniqueMeetingCode();
 
+        // Host participant
+        const initialParticipants = [{
+            user: req.user.id,
+            role: 'host',
+            joinedAt: new Date()
+        }];
+
+        const targetUserIds = new Set();
+
+        // 1. Process workspace team members if workspaceId provided
+        if (workspaceId) {
+            const workspace = await Workspace.findById(workspaceId).populate('members.user');
+            if (workspace && workspace.members) {
+                workspace.members.forEach(m => {
+                    const memberId = m.user?._id ? m.user._id.toString() : m.user?.toString();
+                    if (memberId && memberId !== req.user.id) {
+                        targetUserIds.add(memberId);
+                    }
+                });
+            }
+        }
+
+        // 2. Process individual invited users (user IDs or emails)
+        if (Array.isArray(invitedUsers) && invitedUsers.length > 0) {
+            for (const item of invitedUsers) {
+                if (!item) continue;
+                // Check if item is valid ObjectId or email
+                let userId = item;
+                if (typeof item === 'string' && item.includes('@')) {
+                    const foundUser = await User.findOne({ email: item.toLowerCase().trim() });
+                    if (foundUser) userId = foundUser._id.toString();
+                    else continue;
+                }
+                if (userId && userId !== req.user.id) {
+                    targetUserIds.add(userId.toString());
+                }
+            }
+        }
+
+        // Add target users to meeting participants
+        targetUserIds.forEach(uId => {
+            initialParticipants.push({
+                user: uId,
+                role: 'attendee',
+                joinedAt: new Date()
+            });
+        });
+
         const newMeeting = new Meeting({
             title,
             description,
@@ -58,28 +132,51 @@ router.post('/', authenticateToken, async (req, res) => {
             meetingCode,
             passcode,
             isPrivate: isPrivate || false,
+            isInstant: isInstant || false,
             startTime,
-            status: 'scheduled',
-            participants: [{
-                user: req.user.id,
-                role: 'host',
-                joinedAt: new Date()
-            }]
+            status: isInstant ? 'active' : 'scheduled',
+            participants: initialParticipants
         });
 
         await newMeeting.save();
 
-        console.log(`New Meeting Created: ${newMeeting.title} (${newMeeting.meetingCode}) by Host ${req.user.email}`);
+        // Send notifications to all invited users
+        const io = req.app.get('io');
+        const hostUser = await User.findById(req.user.id);
+        const hostName = hostUser?.name || req.user.email || 'A colleague';
+
+        const formattedDate = new Date(startTime).toLocaleString([], {
+            dateStyle: 'medium',
+            timeStyle: 'short'
+        });
+
+        for (const targetUserId of targetUserIds) {
+            try {
+                await createNotification(io, {
+                    userId: targetUserId,
+                    title: 'Scheduled Meeting Invitation',
+                    message: `${hostName} invited you to meeting "${title}" scheduled for ${formattedDate}`,
+                    type: 'action_item',
+                    link: '/schedule'
+                });
+            } catch (notifErr) {
+                console.error(`Error notifying user ${targetUserId}:`, notifErr);
+            }
+        }
+
+        console.log(`New Meeting Created: ${newMeeting.title} (${newMeeting.meetingCode}) by Host ${req.user.email}. ${targetUserIds.size} attendees notified.`);
 
         res.status(201).json({
-            message: 'Meeting created successfully',
-            meeting: newMeeting
+            message: 'Meeting scheduled successfully',
+            meeting: newMeeting,
+            notifiedCount: targetUserIds.size
         });
     } catch (error) {
         console.error('Error creating meeting:', error);
         res.status(500).json({ message: 'Internal server error creating meeting' });
     }
 });
+
 
 /**
  * @route   GET /meetings

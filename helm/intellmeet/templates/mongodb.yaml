@@ -1,0 +1,71 @@
+{{- if .Values.mongodb.enabled }}
+{{- if .Values.mongodb.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "intellmeet.fullname" . }}-mongodb-pvc
+  labels:
+    {{- include "intellmeet.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.mongodb.persistence.storageClass }}
+  storageClassName: {{ .Values.mongodb.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.mongodb.persistence.size }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "intellmeet.fullname" . }}-mongodb
+  labels:
+    {{- include "intellmeet.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+spec:
+  replicas: {{ .Values.mongodb.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "intellmeet.fullname" . }}-mongodb
+  template:
+    metadata:
+      labels:
+        app: {{ include "intellmeet.fullname" . }}-mongodb
+        app.kubernetes.io/component: database
+    spec:
+      containers:
+        - name: mongodb
+          image: "{{ .Values.mongodb.image.repository }}:{{ .Values.mongodb.image.tag }}"
+          imagePullPolicy: {{ .Values.mongodb.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.mongodb.service.port }}
+          resources:
+            {{- toYaml .Values.mongodb.resources | nindent 12 }}
+          {{- if .Values.mongodb.persistence.enabled }}
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /data/db
+          {{- end }}
+      {{- if .Values.mongodb.persistence.enabled }}
+      volumes:
+        - name: mongodb-data
+          persistentVolumeClaim:
+            claimName: {{ include "intellmeet.fullname" . }}-mongodb-pvc
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "intellmeet.fullname" . }}-mongodb-service
+  labels:
+    {{- include "intellmeet.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.mongodb.service.type }}
+  ports:
+    - port: {{ .Values.mongodb.service.port }}
+      targetPort: {{ .Values.mongodb.service.port }}
+  selector:
+    app: {{ include "intellmeet.fullname" . }}-mongodb
+{{- end }}

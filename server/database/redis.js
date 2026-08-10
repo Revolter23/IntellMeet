@@ -6,17 +6,42 @@ dotenv.config();
 
 let isRedisConnected = false;
 
-// Configured for local Redis server instance running on 127.0.0.1:6379
-const LOCAL_REDIS_URL = process.env.REDIS_LOCAL_URL || 'redis://127.0.0.1:6379';
+// Resolve Redis URL based on environment configuration:
+// 1. Full connection URI (REDIS_URL) - Managed Cloud Redis (Upstash, Redis Cloud, AWS ElastiCache, Render, etc.)
+// 2. HOST + PORT (+ optional PASSWORD) - Docker Compose / Kubernetes ConfigMaps
+// 3. REDIS_LOCAL_URL or local default 127.0.0.1:6379
+function getRedisUrl() {
+    if (process.env.REDIS_URL) {
+        return process.env.REDIS_URL;
+    }
+    if (process.env.REDIS_HOST) {
+        const host = process.env.REDIS_HOST;
+        const port = process.env.REDIS_PORT || 6379;
+        const password = process.env.REDIS_PASSWORD ? `:${process.env.REDIS_PASSWORD}@` : '';
+        return `redis://${password}${host}:${port}`;
+    }
+    return process.env.REDIS_LOCAL_URL || 'redis://127.0.0.1:6379';
+}
+
+const REDIS_URL = getRedisUrl();
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Safely sanitize URL for logging (strip out password if present)
+const sanitizedUrl = REDIS_URL.replace(/\/\/[^:]+:[^@]+@/, '//***:***@');
 
 const redisClient = createClient({
-    url: LOCAL_REDIS_URL,
+    url: REDIS_URL,
     socket: {
-        connectTimeout: 5000,
+        connectTimeout: 10000,
+        tls: REDIS_URL.startsWith('rediss://') ? true : undefined,
         reconnectStrategy: (retries) => {
+            if (isProduction) {
+                // Production: exponential backoff retries up to 30s
+                return Math.min(retries * 500, 30000);
+            }
             if (retries > 3) {
-                console.log('ℹ Local Redis unavailable after retries. In-memory fallback active.');
-                return new Error('Local Redis connection failed');
+                console.log('ℹ Redis unavailable. In-memory fallback active.');
+                return new Error('Redis connection failed');
             }
             return Math.min(retries * 500, 1500);
         }
@@ -25,13 +50,13 @@ const redisClient = createClient({
 
 redisClient.on('error', (err) => {
     if (isRedisConnected) {
-        console.error('Local Redis Error:', err.message || err);
+        console.error('Redis Error:', err.message || err);
     }
     isRedisConnected = false;
 });
 
 redisClient.on('ready', () => {
-    console.log(`Connected to Local Redis Server successfully on ${LOCAL_REDIS_URL}!`);
+    console.log(`Connected to Redis Server successfully on ${sanitizedUrl}!`);
     isRedisConnected = true;
 });
 
@@ -39,12 +64,12 @@ redisClient.on('end', () => {
     isRedisConnected = false;
 });
 
-// Asynchronously connect to local Redis instance without blocking server boot
 redisClient.connect().catch((err) => {
-    console.log(`ℹ Local Redis (${LOCAL_REDIS_URL}) not running. Operating in local in-memory mode.`);
+    console.log(`ℹ Redis (${sanitizedUrl}) not running. Operating in in-memory fallback mode.`);
     isRedisConnected = false;
 });
 
 export { isRedisConnected };
 export default redisClient;
+
 

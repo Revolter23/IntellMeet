@@ -8,6 +8,11 @@ import {
   WarningIcon
 } from "../lib/icons"
 
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Card } from "@/components/ui/card"
+
 interface User {
   _id: string;
   name: string;
@@ -120,46 +125,34 @@ export default function PostMeetingDashboard() {
         setSelectedBoardId(bList[0]._id)
       }
     } catch (err) {
-      console.error("Error fetching boards:", err)
+      console.error("Error fetching workspace boards:", err)
     }
   }
 
   const handleConvertSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedWorkspaceId || !selectedBoardId || !taskTitle.trim() || !convertingActionItem) return
+    if (!selectedBoardId || !taskTitle.trim()) return
 
     setConvertLoading(true)
+    setConvertSuccessMsg('')
     try {
-      await api.post('/api/boards/tasks/from-action-item', {
-        workspaceId: selectedWorkspaceId,
+      const assignees = selectedAssigneeId ? [selectedAssigneeId] : []
+      await api.post('/api/boards/tasks', {
         boardId: selectedBoardId,
         columnId: targetColumnId,
         title: taskTitle.trim(),
         description: taskDesc.trim(),
         priority: taskPriority,
-        assigneeId: selectedAssigneeId || undefined,
-        meetingId: meeting?._id,
-        actionItemId: convertingActionItem._id
+        assignees: assignees
       })
 
-      if (meeting) {
-        setMeeting({
-          ...meeting,
-          actionItems: meeting.actionItems?.map(ai => 
-            ai._id === convertingActionItem._id 
-              ? { ...ai, status: 'completed' } 
-              : ai
-          )
-        })
-      }
-
-      setConvertSuccessMsg("Task successfully created and assigned!")
+      setConvertSuccessMsg('Action item successfully converted into Kanban Task Card!')
       setTimeout(() => {
         setConvertingActionItem(null)
-        setConvertSuccessMsg('')
-      }, 1200)
+      }, 1500)
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to assign action item as task')
+      console.error("Error converting action item:", err)
+      alert(err.response?.data?.message || 'Failed to create task card')
     } finally {
       setConvertLoading(false)
     }
@@ -170,17 +163,16 @@ export default function PostMeetingDashboard() {
       if (!meetingCode) return
       try {
         setLoading(true)
-        const res = await api.get(`/meetings/${meetingCode}`)
+        const res = await api.get(`/meetings/history/${meetingCode}`)
         setMeeting(res.data.meeting)
         setError(null)
       } catch (err: any) {
-        console.error("Error fetching meeting details:", err)
-        setError("Unable to load meeting dashboard. It might not exist or you might not have access permissions.")
+        console.error("Error fetching meeting post-dashboard details:", err)
+        setError(err.response?.data?.message || "Failed to load post-meeting insights.")
       } finally {
         setLoading(false)
       }
     }
-    
     fetchMeetingDetails()
   }, [meetingCode])
 
@@ -221,13 +213,13 @@ export default function PostMeetingDashboard() {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-6">
         <div className="relative flex items-center justify-center">
-          <div className="h-16 w-16 rounded-full border-[3px] border-slate-900" />
-          <div className="absolute h-16 w-16 rounded-full border-t-[3px] border-indigo-500 animate-spin" />
-          <div className="absolute h-8 w-8 rounded-full bg-indigo-600/20 border border-indigo-500/30 animate-pulse" />
+          <div className="h-16 w-16 rounded-full border-[3px] border-border-default" />
+          <div className="absolute h-16 w-16 rounded-full border-t-[3px] border-brand-primary animate-spin" />
+          <div className="absolute h-8 w-8 rounded-full bg-brand-primary/20 border border-border-brand/30 animate-pulse" />
         </div>
         <div className="text-center space-y-1">
-          <h3 className="text-sm font-semibold text-slate-350">Compiling Session Intelligence...</h3>
-          <p className="text-xs text-slate-500 font-medium">Aggregating transcripts and metadata</p>
+          <h3 className="text-sm font-semibold text-text-primary">Compiling Session Intelligence...</h3>
+          <p className="text-xs text-text-muted font-medium">Aggregating transcripts and metadata</p>
         </div>
       </div>
     )
@@ -235,21 +227,22 @@ export default function PostMeetingDashboard() {
 
   if (error || !meeting) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-        <div className="h-14 w-14 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 mb-6 shadow-lg">
+      <Card className="flex flex-col items-center justify-center py-20 px-4 text-center gap-0">
+        <div className="h-14 w-14 rounded-2xl bg-status-danger/10 border border-status-danger/20 flex items-center justify-center text-status-danger mb-6 shadow-lg">
           <WarningIcon size={24} />
         </div>
-        <h3 className="text-lg font-bold text-slate-200">Failed to Load Dashboard</h3>
-        <p className="text-sm text-slate-500 mt-2 max-w-sm leading-relaxed">
+        <h3 className="text-lg font-bold text-text-primary">Failed to Load Dashboard</h3>
+        <p className="text-sm text-text-muted mt-2 max-w-sm leading-relaxed">
           {error || "Meeting details could not be found."}
         </p>
-        <button
+        <Button
+          variant="outline"
           onClick={() => navigate("/meetings/history")}
-          className="mt-6 px-6 py-2.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 rounded-xl text-xs font-semibold text-slate-200 transition-all active:scale-[0.98] cursor-pointer"
+          className="mt-6 px-6 py-2.5 bg-bg-surface border border-border-default hover:bg-bg-surface-hover rounded-xl text-xs font-semibold text-text-primary transition-all active:scale-[0.98] cursor-pointer"
         >
           Return to History
-        </button>
-      </div>
+        </Button>
+      </Card>
     )
   }
 
@@ -261,9 +254,10 @@ export default function PostMeetingDashboard() {
     <div className="space-y-6">
       {/* Back & Breadcrumb bar */}
       <div className="flex items-center justify-between">
-        <button
+        <Button
+          variant="ghost"
           onClick={() => navigate("/meetings/history")}
-          className="flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors group cursor-pointer"
+          className="flex items-center gap-2 text-xs font-semibold text-text-muted hover:text-text-primary transition-colors group cursor-pointer p-0 h-auto"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -276,31 +270,31 @@ export default function PostMeetingDashboard() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
           </svg>
           Back to History
-        </button>
+        </Button>
 
-        <span className="text-xs text-slate-500 font-medium">
-          Session Code: <span className="font-mono text-slate-400 select-all">{meeting.meetingCode}</span>
+        <span className="text-xs text-text-muted font-medium">
+          Session Code: <span className="font-mono text-text-secondary select-all">{meeting.meetingCode}</span>
         </span>
       </div>
 
       {/* Main Header Card */}
-      <section className="relative overflow-hidden rounded-2xl border border-slate-900 bg-slate-950/40 p-6 md:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-violet-500/5 to-transparent pointer-events-none" />
+      <Card className="relative overflow-hidden rounded-2xl border border-border-default bg-bg-surface p-6 md:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 shadow-md gap-0">
+        <div className="absolute inset-0 bg-gradient-to-r from-brand-primary/5 via-brand-secondary/5 to-transparent pointer-events-none" />
 
         <div className="space-y-2 relative z-10">
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 uppercase tracking-wide">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-status-success/10 border border-status-success/20 text-status-success uppercase tracking-wide">
               {meeting.status}
             </span>
-            <span className="text-xs text-slate-500">•</span>
-            <span className="text-xs text-slate-400 flex items-center gap-1">
+            <span className="text-xs text-text-muted">•</span>
+            <span className="text-xs text-text-muted flex items-center gap-1">
               <CalendarIcon size={12} />
               {formatDate(meeting.startTime)}
             </span>
           </div>
-          <h1 className="text-2xl font-bold text-slate-100">{meeting.title}</h1>
+          <h1 className="text-2xl font-bold text-text-primary">{meeting.title}</h1>
           {meeting.description && (
-            <p className="text-sm text-slate-400 max-w-2xl">{meeting.description}</p>
+            <p className="text-sm text-text-muted max-w-2xl">{meeting.description}</p>
           )}
         </div>
 
@@ -311,54 +305,55 @@ export default function PostMeetingDashboard() {
               href={meeting.recordingUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 transition-all duration-200 active:scale-[0.98] shadow-lg cursor-pointer"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-status-danger/30 bg-status-danger/10 hover:bg-status-danger/20 text-status-danger transition-all duration-200 active:scale-[0.98] shadow-lg cursor-pointer"
             >
-              <VideoIcon size={16} className="text-rose-400" />
+              <VideoIcon size={16} className="text-status-danger" />
               <span className="text-xs font-semibold">Access Recording</span>
             </a>
           ) : (
-            <button
+            <Button
               disabled
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-850 bg-slate-900/20 text-slate-600 cursor-not-allowed opacity-60 shadow-none"
+              variant="outline"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border-subtle bg-bg-surface-hover/20 text-text-muted cursor-not-allowed opacity-60 shadow-none"
               title="No video recording is available for this session"
             >
-              <VideoIcon size={16} className="text-slate-600" />
+              <VideoIcon size={16} className="text-text-muted" />
               <span className="text-xs font-semibold">No Recording Available</span>
-            </button>
+            </Button>
           )}
         </div>
-      </section>
+      </Card>
 
       {/* Main Layout Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* Left column: Sidebar Info & Participants */}
         <div className="space-y-6 lg:col-span-1">
           {/* Details list */}
-          <div className="rounded-xl border border-slate-900 bg-slate-950/20 p-5 space-y-4">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Session Details</h3>
-            <div className="space-y-3 text-xs text-slate-400">
-              <div className="flex justify-between py-1.5 border-b border-slate-900/50">
-                <span className="text-slate-500">Scheduled Time</span>
+          <Card className="rounded-xl border border-border-default bg-bg-surface p-5 space-y-4 shadow-sm gap-0">
+            <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider">Session Details</h3>
+            <div className="space-y-3 text-xs text-text-secondary">
+              <div className="flex justify-between py-1.5 border-b border-border-subtle">
+                <span className="text-text-muted">Scheduled Time</span>
                 <span>{formatTime(meeting.startTime)}</span>
               </div>
-              <div className="flex justify-between py-1.5 border-b border-slate-900/50">
-                <span className="text-slate-500">End Time</span>
+              <div className="flex justify-between py-1.5 border-b border-border-subtle">
+                <span className="text-text-muted">End Time</span>
                 <span>{meeting.endTime ? new Date(meeting.endTime).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' }) : "Not ended"}</span>
               </div>
-              <div className="flex justify-between py-1.5 border-b border-slate-900/50">
-                <span className="text-slate-500">Duration</span>
+              <div className="flex justify-between py-1.5 border-b border-border-subtle">
+                <span className="text-text-muted">Duration</span>
                 <span>{getDuration(meeting.startTime, meeting.endTime)}</span>
               </div>
               <div className="flex justify-between py-1.5">
-                <span className="text-slate-500">Total Participants</span>
-                <span className="font-semibold text-slate-350">{meeting.participants.length}</span>
+                <span className="text-text-muted">Total Participants</span>
+                <span className="font-semibold text-text-primary">{meeting.participants.length}</span>
               </div>
             </div>
-          </div>
+          </Card>
 
           {/* Participants list */}
-          <div className="rounded-xl border border-slate-900 bg-slate-950/20 p-5 space-y-4">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <Card className="rounded-xl border border-border-default bg-bg-surface p-5 space-y-4 shadow-sm gap-0">
+            <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider">
               Participants ({meeting.participants.length})
             </h3>
             <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
@@ -369,52 +364,54 @@ export default function PostMeetingDashboard() {
                       <img
                         src={p.user.avatar}
                         alt={p.user.name}
-                        className="h-7 w-7 rounded-full border border-slate-900 object-cover"
+                        className="h-7 w-7 rounded-full border border-border-subtle object-cover"
                       />
                     ) : (
-                      <div className="h-7 w-7 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-[9px] text-slate-400 shrink-0">
+                      <div className="h-7 w-7 rounded-full bg-bg-surface-hover border border-border-subtle flex items-center justify-center font-bold text-[9px] text-text-muted shrink-0">
                         {getInitials(p.user.name)}
                       </div>
                     )}
                     <div className="overflow-hidden">
-                      <p className="font-medium text-slate-300 truncate">{p.user.name}</p>
-                      <p className="text-[10px] text-slate-500 truncate">{p.user.email}</p>
+                      <p className="font-medium text-text-primary truncate">{p.user.name}</p>
+                      <p className="text-[10px] text-text-muted truncate">{p.user.email}</p>
                     </div>
                   </div>
                   <span className={`px-2 py-0.5 rounded text-[9px] capitalize shrink-0 font-medium ${
                     p.role === 'host'
-                      ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/25'
-                      : 'bg-slate-900 text-slate-500'
+                      ? 'bg-brand-primary/10 text-text-brand border border-border-brand/20'
+                      : 'bg-bg-surface-hover text-text-muted'
                   }`}>
                     {p.role}
                   </span>
                 </div>
               ))}
             </div>
-          </div>
+          </Card>
         </div>
 
         {/* Right column: Main Dashboard Insights & Transcript tabs */}
         <div className="lg:col-span-2 space-y-6">
           {/* Tab Navigation header */}
-          <div className="flex border-b border-slate-900">
-            <button
+          <div className="flex border-b border-border-subtle">
+            <Button
+              variant="ghost"
               onClick={() => setActiveTab('insights')}
-              className={`px-5 py-3 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-5 py-3 text-xs font-bold border-b-2 rounded-none transition-all cursor-pointer flex items-center gap-1.5 h-auto ${
                 activeTab === 'insights'
-                  ? 'border-indigo-500 text-indigo-400 font-semibold'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
+                  ? 'border-border-brand text-text-brand font-semibold'
+                  : 'border-transparent text-text-muted hover:text-text-primary'
               }`}
             >
-              <SparklesIcon size={14} className={activeTab === 'insights' ? 'text-indigo-400' : 'text-slate-400'} />
+              <SparklesIcon size={14} className={activeTab === 'insights' ? 'text-text-brand' : 'text-text-muted'} />
               AI Insights
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
               onClick={() => setActiveTab('transcript')}
-              className={`px-5 py-3 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-5 py-3 text-xs font-bold border-b-2 rounded-none transition-all cursor-pointer flex items-center gap-1.5 h-auto ${
                 activeTab === 'transcript'
-                  ? 'border-indigo-500 text-indigo-400 font-semibold'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
+                  ? 'border-border-brand text-text-brand font-semibold'
+                  : 'border-transparent text-text-muted hover:text-text-primary'
               }`}
             >
               <svg
@@ -432,42 +429,42 @@ export default function PostMeetingDashboard() {
                 />
               </svg>
               Full Transcript
-            </button>
+            </Button>
           </div>
 
           {/* Tab Contents */}
           {activeTab === 'insights' ? (
             <div className="space-y-6">
               {/* Summary window */}
-              <div className="rounded-xl border border-slate-900 bg-slate-950/20 p-6 space-y-4">
-                <div className="flex items-center gap-2 border-b border-slate-900 pb-3">
-                  <SparklesIcon size={16} className="text-indigo-400" />
-                  <h2 className="text-sm font-semibold text-slate-200">AI Summary</h2>
+              <Card className="rounded-xl border border-border-default bg-bg-surface p-6 space-y-4 shadow-sm gap-0">
+                <div className="flex items-center gap-2 border-b border-border-subtle pb-3">
+                  <SparklesIcon size={16} className="text-text-brand" />
+                  <h2 className="text-sm font-semibold text-text-primary">AI Summary</h2>
                 </div>
                 {hasSummary ? (
-                  <div className="text-slate-350 text-sm leading-relaxed whitespace-pre-wrap">
+                  <div className="text-text-secondary text-sm leading-relaxed whitespace-pre-wrap">
                     {meeting.summary}
                   </div>
                 ) : (
-                  <div className="py-8 text-center text-slate-500 space-y-2">
+                  <div className="py-8 text-center text-text-muted space-y-2">
                     <p className="text-xs">No AI summary generated for this meeting.</p>
-                    <p className="text-[11px] text-slate-650 max-w-md mx-auto">
+                    <p className="text-[11px] text-text-subtle max-w-md mx-auto">
                       AI summaries are generated automatically once a recording is uploaded and parsed by the processing engine.
                     </p>
                   </div>
                 )}
-              </div>
+              </Card>
 
               {/* Action items window */}
-              <div className="rounded-xl border border-slate-900 bg-slate-950/20 p-6 space-y-4">
-                <div className="flex items-center gap-2 border-b border-slate-900 pb-3">
+              <Card className="rounded-xl border border-border-default bg-bg-surface p-6 space-y-4 shadow-sm gap-0">
+                <div className="flex items-center gap-2 border-b border-border-subtle pb-3">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
                     strokeWidth={1.5}
                     stroke="currentColor"
-                    className="h-4 w-4 text-indigo-400"
+                    className="h-4 w-4 text-text-brand"
                   >
                     <path
                       strokeLinecap="round"
@@ -475,20 +472,20 @@ export default function PostMeetingDashboard() {
                       d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
-                  <h2 className="text-sm font-semibold text-slate-200">Action Items</h2>
+                  <h2 className="text-sm font-semibold text-text-primary">Action Items</h2>
                 </div>
                 {hasActionItems ? (
                   <div className="space-y-3">
                     {meeting.actionItems?.map((item) => (
                       <div
                         key={item._id}
-                        className="flex items-start justify-between gap-3 p-3.5 bg-slate-900/30 border border-slate-900 rounded-xl hover:bg-slate-900/50 transition-colors"
+                        className="flex items-start justify-between gap-3 p-3.5 bg-bg-app border border-border-subtle rounded-xl hover:bg-bg-surface-hover transition-colors"
                       >
                         <div className="flex items-start gap-3">
                           <span className={`mt-0.5 h-4 w-4 rounded-full border flex items-center justify-center shrink-0 ${
                             item.status === 'completed'
-                              ? 'bg-indigo-600 border-indigo-500 text-white'
-                              : 'border-slate-800'
+                              ? 'bg-brand-primary border-border-brand text-text-inverse'
+                              : 'border-border-default'
                           }`}>
                             {item.status === 'completed' && (
                               <svg
@@ -504,7 +501,7 @@ export default function PostMeetingDashboard() {
                             )}
                           </span>
                           <span className={`text-xs ${
-                            item.status === 'completed' ? 'text-slate-500 line-through' : 'text-slate-350'
+                            item.status === 'completed' ? 'text-text-muted line-through' : 'text-text-primary'
                           }`}>
                             {item.task}
                           </span>
@@ -514,38 +511,40 @@ export default function PostMeetingDashboard() {
                         <div className="flex items-center gap-2 shrink-0 pl-4">
                           {(item.assignee || item.assigneeName) && (
                             <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] text-slate-500">Assignee:</span>
-                              <span className="px-2 py-0.5 rounded-full bg-slate-900 border border-slate-850 text-[10px] text-slate-400 font-medium">
+                              <span className="text-[10px] text-text-muted">Assignee:</span>
+                              <span className="px-2 py-0.5 rounded-full bg-bg-surface-hover border border-border-subtle text-[10px] text-text-secondary font-medium">
                                 {item.assignee?.name || item.assigneeName}
                               </span>
                             </div>
                           )}
 
-                          <button
+                          <Button
+                            variant="outline"
+                            size="xs"
                             onClick={() => openConvertModal(item)}
-                            className="px-2.5 py-1 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 text-indigo-400 text-[11px] font-medium rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                            className="px-2.5 py-1 bg-brand-primary/10 hover:bg-brand-primary/20 border border-border-brand/20 text-text-brand text-[11px] font-medium rounded-lg transition-all cursor-pointer flex items-center gap-1"
                             title="Assign action item as a Kanban Task Card to a workspace member"
                           >
                             ⚡ Assign as Task
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="py-8 text-center text-slate-500">
+                  <div className="py-8 text-center text-text-muted">
                     <p className="text-xs">No key tasks or action items were extracted by AI.</p>
                   </div>
                 )}
-              </div>
+              </Card>
             </div>
           ) : (
             /* Transcript window */
-            <div className="rounded-xl border border-slate-900 bg-slate-950/20 p-6 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-900 pb-3">
-                <h2 className="text-sm font-semibold text-slate-200">Meeting Transcript</h2>
+            <Card className="rounded-xl border border-border-default bg-bg-surface p-6 space-y-4 shadow-sm gap-0">
+              <div className="flex items-center justify-between border-b border-border-subtle pb-3">
+                <h2 className="text-sm font-semibold text-text-primary">Meeting Transcript</h2>
                 {hasTranscript && (
-                  <span className="text-[11px] text-slate-500">
+                  <span className="text-[11px] text-text-muted">
                     {meeting.transcript?.length} segments recorded
                   </span>
                 )}
@@ -556,26 +555,26 @@ export default function PostMeetingDashboard() {
                   {meeting.transcript?.map((seg) => (
                     <div
                       key={seg._id}
-                      className="p-3.5 bg-slate-900/10 border border-slate-900/50 rounded-xl hover:border-slate-850/80 hover:bg-slate-900/25 transition-all"
+                      className="p-3.5 bg-bg-app border border-border-subtle rounded-xl hover:border-border-default hover:bg-bg-surface-hover transition-all"
                     >
                       <div className="flex items-center justify-between mb-1.5">
                         <div className="flex items-center gap-2">
                           {seg.speaker?.avatar ? (
                             <img
                               src={seg.speaker.avatar}
-                              className="h-5 w-5 rounded-full object-cover border border-slate-900"
+                              className="h-5 w-5 rounded-full object-cover border border-border-subtle"
                               alt=""
                             />
                           ) : (
-                            <div className="h-5 w-5 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-[8px] text-slate-400">
+                            <div className="h-5 w-5 rounded-full bg-bg-surface-hover border border-border-subtle flex items-center justify-center font-bold text-[8px] text-text-muted">
                               {getInitials(seg.speaker?.name || seg.speakerName)}
                             </div>
                           )}
-                          <span className="text-xs font-semibold text-indigo-400">
+                          <span className="text-xs font-semibold text-text-brand">
                             {seg.speaker?.name || seg.speakerName || "Speaker"}
                           </span>
                         </div>
-                        <span className="text-[10px] text-slate-600">
+                        <span className="text-[10px] text-text-subtle">
                           {new Date(seg.timestamp).toLocaleTimeString([], {
                             hour: '2-digit',
                             minute: '2-digit',
@@ -583,63 +582,65 @@ export default function PostMeetingDashboard() {
                           })}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-350 leading-relaxed pl-7">{seg.text}</p>
+                      <p className="text-xs text-text-secondary leading-relaxed pl-7">{seg.text}</p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="py-12 text-center text-slate-500 space-y-2">
+                <div className="py-12 text-center text-text-muted space-y-2">
                   <p className="text-xs">No transcript available for this session.</p>
-                  <p className="text-[11px] text-slate-650 max-w-sm mx-auto">
+                  <p className="text-[11px] text-text-subtle max-w-sm mx-auto">
                     Full audio transcripts are compiled in real-time if voice recognition is enabled, or processed post-call from recordings.
                   </p>
                 </div>
               )}
-            </div>
+            </Card>
           )}
         </div>
       </div>
 
       {/* Modal: Convert Action Item to Workspace Task Card */}
       {convertingActionItem && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
+        <div className="fixed inset-0 bg-bg-overlay backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <Card className="bg-bg-modal border border-border-default rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl gap-0">
+            <div className="flex items-center justify-between border-b border-border-subtle pb-3">
+              <h3 className="text-base font-bold text-text-primary flex items-center gap-2">
                 ⚡ Assign Action Item as Task
               </h3>
-              <button
+              <Button
+                variant="ghost"
+                size="icon-xs"
                 onClick={() => setConvertingActionItem(null)}
-                className="text-slate-500 hover:text-slate-300 text-sm font-bold"
+                className="text-text-muted hover:text-text-primary text-sm font-bold cursor-pointer"
               >
                 ✕
-              </button>
+              </Button>
             </div>
 
             {convertSuccessMsg && (
-              <p className="text-xs text-emerald-400 bg-emerald-500/10 p-2.5 rounded-xl border border-emerald-500/20">
+              <p className="text-xs text-status-success bg-status-success/10 p-2.5 rounded-xl border border-status-success/20">
                 {convertSuccessMsg}
               </p>
             )}
 
             <form onSubmit={handleConvertSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Task Title</label>
-                <input
+                <Label className="block text-xs font-semibold text-text-muted mb-1">Task Title</Label>
+                <Input
                   type="text"
                   required
                   value={taskTitle}
                   onChange={(e) => setTaskTitle(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-2 bg-bg-input border-border-default rounded-xl text-sm text-text-primary focus-visible:border-border-brand"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Target Team Workspace</label>
+                <Label className="block text-xs font-semibold text-text-muted mb-1">Target Team Workspace</Label>
                 <select
                   value={selectedWorkspaceId}
                   onChange={(e) => handleWorkspaceSelectChange(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-2 bg-bg-input border border-border-default rounded-xl text-sm text-text-primary focus:outline-none focus:border-border-brand"
                 >
                   {workspaces.map((w) => (
                     <option key={w._id} value={w._id}>{w.name}</option>
@@ -648,11 +649,11 @@ export default function PostMeetingDashboard() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Target Project Board</label>
+                <Label className="block text-xs font-semibold text-text-muted mb-1">Target Project Board</Label>
                 <select
                   value={selectedBoardId}
                   onChange={(e) => setSelectedBoardId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-2 bg-bg-input border border-border-default rounded-xl text-sm text-text-primary focus:outline-none focus:border-border-brand"
                 >
                   {boards.map((b) => (
                     <option key={b._id} value={b._id}>{b.title}</option>
@@ -661,11 +662,11 @@ export default function PostMeetingDashboard() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Assign To Team Member</label>
+                <Label className="block text-xs font-semibold text-text-muted mb-1">Assign To Team Member</Label>
                 <select
                   value={selectedAssigneeId}
                   onChange={(e) => setSelectedAssigneeId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-2 bg-bg-input border border-border-default rounded-xl text-sm text-text-primary focus:outline-none focus:border-border-brand"
                 >
                   <option value="">Unassigned (Open task)</option>
                   {workspaceMembers.map((m) => {
@@ -682,11 +683,11 @@ export default function PostMeetingDashboard() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Kanban Column</label>
+                  <Label className="block text-xs font-semibold text-text-muted mb-1">Kanban Column</Label>
                   <select
                     value={targetColumnId}
                     onChange={(e) => setTargetColumnId(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-bg-input border border-border-default rounded-xl text-sm text-text-primary focus:outline-none focus:border-border-brand"
                   >
                     <option value="col-todo">To Do</option>
                     <option value="col-in-progress">In Progress</option>
@@ -696,11 +697,11 @@ export default function PostMeetingDashboard() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Priority</label>
+                  <Label className="block text-xs font-semibold text-text-muted mb-1">Priority</Label>
                   <select
                     value={taskPriority}
                     onChange={(e) => setTaskPriority(e.target.value as any)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-bg-input border border-border-default rounded-xl text-sm text-text-primary focus:outline-none focus:border-border-brand"
                   >
                     <option value="LOW">Low</option>
                     <option value="MEDIUM">Medium</option>
@@ -711,33 +712,34 @@ export default function PostMeetingDashboard() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Notes / Description</label>
+                <Label className="block text-xs font-semibold text-text-muted mb-1">Notes / Description</Label>
                 <textarea
                   rows={2}
                   value={taskDesc}
                   onChange={(e) => setTaskDesc(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-2 bg-bg-input border border-border-default rounded-xl text-sm text-text-primary focus:outline-none focus:border-border-brand"
                 />
               </div>
 
               <div className="flex justify-end gap-3 pt-2">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => setConvertingActionItem(null)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-medium rounded-xl hover:bg-slate-700 cursor-pointer"
+                  className="px-4 py-2 bg-bg-surface-hover text-text-secondary text-xs font-medium rounded-xl hover:bg-bg-surface cursor-pointer"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
                   disabled={convertLoading}
-                  className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-medium rounded-xl hover:opacity-90 cursor-pointer"
+                  className="px-4 py-2 bg-gradient-to-r from-brand-primary to-brand-secondary text-text-inverse text-xs font-medium rounded-xl hover:opacity-90 cursor-pointer"
                 >
                   {convertLoading ? 'Creating Task...' : 'Create & Assign Task'}
-                </button>
+                </Button>
               </div>
             </form>
-          </div>
+          </Card>
         </div>
       )}
     </div>

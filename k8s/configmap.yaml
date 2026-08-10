@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: intellmeet-configmap
+  labels:
+    app.kubernetes.io/name: intellmeet
+    app.kubernetes.io/part-of: intellmeet
+data:
+  PORT: "3000"
+  REDIS_HOST: "intellmeet-redis-service"
+  REDIS_PORT: "6379"
+  CLIENT_URL: "http://intellmeet.local"
+  NODE_ENV: "production"

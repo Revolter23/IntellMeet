@@ -8,6 +8,9 @@ import {
   WarningIcon
 } from "../lib/icons"
 
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+
 interface User {
   _id: string;
   name: string;
@@ -76,80 +79,80 @@ export default function MyMeetings() {
     <div className="space-y-6">
       {/* Page Header */}
       <div>
-        <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-200 to-white bg-clip-text text-transparent">
+        <h1 className="text-2xl font-bold text-text-primary tracking-tight">
           Meeting History
         </h1>
-        <p className="text-slate-400 text-sm mt-1">
+        <p className="text-text-muted text-sm mt-1">
           Access your past meetings, review video recordings, and examine AI summaries.
         </p>
       </div>
 
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4">
-          <Spinner size={36} className="text-indigo-500" />
-          <p className="text-sm text-slate-500 animate-pulse">Loading meetings list...</p>
+          <Spinner size={36} className="text-brand-primary" />
+          <p className="text-sm text-text-muted animate-pulse">Loading meetings list...</p>
         </div>
       ) : error ? (
-        <div className="flex flex-col items-center justify-center p-8 bg-slate-900/30 border border-slate-900 rounded-2xl text-center">
-          <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 mb-4">
+        <Card className="flex flex-col items-center justify-center p-8 bg-bg-surface border border-border-default rounded-2xl text-center shadow-sm gap-0">
+          <div className="p-3 bg-status-danger/10 border border-status-danger/20 rounded-xl text-status-danger mb-4">
             <WarningIcon size={24} />
           </div>
-          <p className="text-sm text-slate-400">{error}</p>
-        </div>
+          <p className="text-sm text-text-muted">{error}</p>
+        </Card>
       ) : meetings.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-12 bg-slate-900/10 border border-slate-900 rounded-2xl text-center">
-          <div className="h-12 w-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 mb-4">
+        <Card className="flex flex-col items-center justify-center p-12 bg-bg-surface border border-border-default rounded-2xl text-center shadow-sm gap-0">
+          <div className="h-12 w-12 rounded-xl bg-bg-surface-hover border border-border-subtle flex items-center justify-center text-text-muted mb-4">
             <CalendarIcon size={24} />
           </div>
-          <h3 className="text-base font-semibold text-slate-200">No Meetings Found</h3>
-          <p className="text-xs text-slate-500 mt-1 max-w-sm">
+          <h3 className="text-base font-semibold text-text-primary">No Meetings Found</h3>
+          <p className="text-xs text-text-muted mt-1 max-w-sm">
             You have not participated in or hosted any meetings yet. Start a new instant meeting from the Home Dashboard.
           </p>
-          <button
+          <Button
             onClick={() => navigate("/dashboard")}
-            className="mt-6 px-5 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-indigo-600/10 transition-all active:scale-[0.98] cursor-pointer"
+            className="mt-6 px-5 py-2 bg-gradient-to-r from-brand-primary to-brand-secondary hover:from-brand-primary-hover hover:to-brand-secondary text-text-inverse rounded-xl text-xs font-semibold shadow-lg shadow-brand-primary/10 transition-all active:scale-[0.98] cursor-pointer"
           >
             Create a Meeting
-          </button>
-        </div>
+          </Button>
+        </Card>
       ) : (
         <div className="grid gap-4">
           {meetings.map((meeting) => (
-            <div
+            <Card
               key={meeting._id}
               onClick={() => navigate(`/meetings/history/${meeting.meetingCode}`)}
-              className="group relative overflow-hidden rounded-xl border border-slate-900 bg-slate-950/40 p-5 hover:border-slate-800 hover:bg-slate-900/20 transition-all duration-350 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4"
+              className="group relative overflow-hidden rounded-xl border border-border-default bg-bg-surface p-5 hover:border-border-brand hover:bg-bg-surface-hover transition-all duration-350 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm"
             >
-              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-violet-500/0 to-transparent group-hover:from-indigo-500/5 group-hover:via-violet-500/5 transition-all duration-350 pointer-events-none" />
+              <div className="absolute inset-0 bg-gradient-to-r from-brand-primary/0 via-brand-secondary/0 to-transparent group-hover:from-brand-primary/5 group-hover:via-brand-secondary/5 transition-all duration-350 pointer-events-none" />
 
               <div className="flex items-start gap-4 z-10">
-                <div className="h-10 w-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 group-hover:bg-indigo-500/20 transition-colors shrink-0">
+                <div className="h-10 w-10 rounded-xl bg-brand-primary/10 border border-border-brand/20 flex items-center justify-center text-text-brand group-hover:bg-brand-primary/20 transition-colors shrink-0">
                   <VideoIcon size={20} />
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-sm text-slate-200 group-hover:text-white transition-colors">
+                    <h3 className="font-semibold text-sm text-text-primary group-hover:text-text-brand transition-colors">
                       {meeting.title}
                     </h3>
                     <span className={`px-2 py-0.5 rounded-full text-[9px] font-semibold border ${
                       meeting.status === 'completed' 
-                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
+                        ? 'bg-status-success/10 border-status-success/20 text-status-success' 
                         : meeting.status === 'active'
-                        ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400 animate-pulse'
+                        ? 'bg-brand-primary/10 border-border-brand/20 text-text-brand animate-pulse'
                         : meeting.status === 'cancelled'
-                        ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
-                        : 'bg-slate-800/40 border-slate-800 text-slate-400'
+                        ? 'bg-status-danger/10 border-status-danger/20 text-status-danger'
+                        : 'bg-bg-surface-hover border-border-subtle text-text-muted'
                     }`}>
                       {meeting.status}
                     </span>
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-muted">
                     <span className="flex items-center gap-1">
                       <CalendarIcon size={12} />
                       {formatDate(meeting.startTime)} at {formatTime(meeting.startTime)}
                     </span>
                     <span>•</span>
-                    <span className="font-mono text-[11px] bg-slate-900/60 px-1.5 py-0.5 rounded border border-slate-850">
+                    <span className="font-mono text-[11px] bg-bg-app px-1.5 py-0.5 rounded border border-border-subtle text-text-secondary">
                       Code: {meeting.meetingCode}
                     </span>
                   </div>
@@ -157,38 +160,40 @@ export default function MyMeetings() {
               </div>
 
               {/* Host and Video Actions */}
-              <div className="flex items-center justify-between md:justify-end gap-6 z-10 border-t border-slate-900/60 pt-3 md:pt-0 md:border-none">
+              <div className="flex items-center justify-between md:justify-end gap-6 z-10 border-t border-border-subtle pt-3 md:pt-0 md:border-none">
                 {/* Host Info */}
                 <div className="flex items-center gap-2.5">
                   {meeting.host.avatar ? (
                     <img
                       src={meeting.host.avatar}
                       alt={meeting.host.name}
-                      className="h-7 w-7 rounded-full border border-slate-800 object-cover"
+                      className="h-7 w-7 rounded-full border border-border-default object-cover"
                     />
                   ) : (
-                    <div className="h-7 w-7 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-[10px] text-slate-400">
+                    <div className="h-7 w-7 rounded-full bg-bg-surface-hover border border-border-subtle flex items-center justify-center font-bold text-[10px] text-text-muted">
                       {getInitials(meeting.host.name)}
                     </div>
                   )}
                   <div className="text-left">
-                    <p className="text-[11px] font-medium text-slate-400">Host</p>
-                    <p className="text-[11px] text-slate-500 -mt-0.5">{meeting.host.name}</p>
+                    <p className="text-[11px] font-medium text-text-muted">Host</p>
+                    <p className="text-[11px] text-text-secondary -mt-0.5">{meeting.host.name}</p>
                   </div>
                 </div>
 
-                {/* Actions */}
+                {/* Actions using Shadcn Button */}
                 <div className="flex items-center gap-2">
-                  <button
+                  <Button
+                    variant="outline"
+                    size="icon"
                     onClick={(e) => {
                       e.stopPropagation()
                       alert("Accessing recording is not implemented yet. Feature coming soon!")
                     }}
-                    className="p-2.5 rounded-xl border border-slate-800 bg-slate-900/35 hover:bg-slate-900 hover:border-slate-700 text-slate-400 hover:text-slate-200 transition-all cursor-pointer shadow-sm relative group/btn"
+                    className="p-2.5 rounded-xl border border-border-default bg-bg-surface-hover/50 hover:bg-bg-surface hover:border-border-strong text-text-muted hover:text-text-primary transition-all cursor-pointer shadow-sm relative group/btn"
                     title="Access Video Recording"
                   >
                     {/* Recording circle badge */}
-                    <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-rose-500 group-hover/btn:animate-ping" />
+                    <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-status-danger group-hover/btn:animate-ping" />
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       fill="none"
@@ -208,9 +213,9 @@ export default function MyMeetings() {
                         d="M15.91 11.672a.375.375 0 0 1 0 .656l-5.603 3.113a.375.375 0 0 1-.557-.328V8.887c0-.286.307-.466.557-.327l5.603 3.112z"
                       />
                     </svg>
-                  </button>
+                  </Button>
 
-                  <span className="text-xs font-semibold text-indigo-400 group-hover:text-indigo-300 flex items-center gap-1 transition-colors pl-2">
+                  <span className="text-xs font-semibold text-text-brand group-hover:text-brand-primary-light flex items-center gap-1 transition-colors pl-2">
                     Insights
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -225,7 +230,7 @@ export default function MyMeetings() {
                   </span>
                 </div>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}

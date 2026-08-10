@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # MongoDB Database Service
+  mongodb:
+    image: mongo:7-alpine
+    container_name: intellmeet-mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - intellmeet-network
+
+  # Redis Cache & Session Service
+  redis:
+    image: redis:7-alpine
+    container_name: intellmeet-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - intellmeet-network
+
+  # Backend Node.js Express Server (Multi-stage container)
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: intellmeet-server
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - MONGOOSE_KEY=mongodb://mongodb:27017/intellmeet
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET_KEY=intellmeet_jwt_secret_production_2026
+      - JWT_REFRESH_SECRET=intellmeet_refresh_secret_production_2026
+      - CLIENT_URL=http://localhost:80
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - intellmeet-network
+
+  # Frontend Vite/React + Nginx Container (Multi-stage container)
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: intellmeet-client
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    networks:
+      - intellmeet-network
+
+networks:
+  intellmeet-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+  redis_data:

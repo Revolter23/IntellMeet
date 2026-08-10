@@ -12,6 +12,7 @@ import ProjectBoardView from './DashboardComponents/ProjectBoardView'
 import MeetingRoom from './MeetingComponent/MeetingRoom'
 import MyMeetings from './MeetingComponent/MyMeetings'
 import PostMeetingDashboard from './MeetingComponent/PostMeetingDashboard'
+import ScheduleView from './MeetingComponent/ScheduleView'
 import { useAuthStore } from './store/useAuthStore'
 import { NotificationProvider } from './context/NotificationContext'
 import ToastContainer from './components/ToastContainer'
@@ -150,6 +151,7 @@ function App() {
           <Route path="/admin" element={<AdminPanel />} />
           <Route path="/workspace" element={<WorkspaceView />} />
           <Route path="/workspace/board" element={<ProjectBoardView />} />
+          <Route path="/schedule" element={<ScheduleView />} />
           <Route path="/meetings/history" element={<MyMeetings />} />
           <Route path="/meetings/history/:meetingCode" element={<PostMeetingDashboard />} />
         </Route>

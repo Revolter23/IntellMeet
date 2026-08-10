@@ -293,5 +293,38 @@ export const TrashIcon = (props: React.SVGProps<SVGSVGElement> & { size?: number
   </svg>
 )
 
+export const MenuIcon = (props: React.SVGProps<SVGSVGElement> & { size?: number }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={props.className} style={{ width: props.size || 22, height: props.size || 22 }}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+  </svg>
+)
+
+export const CloseIcon = (props: React.SVGProps<SVGSVGElement> & { size?: number }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={props.className} style={{ width: props.size || 22, height: props.size || 22 }}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+  </svg>
+)
+
+export const ClockIcon = (props: React.SVGProps<SVGSVGElement> & { size?: number }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={props.className} style={{ width: props.size || 18, height: props.size || 18 }}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+  </svg>
+)
+
+export const WorkspaceIcon = (props: React.SVGProps<SVGSVGElement> & { size?: number }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={props.className} style={{ width: props.size || 20, height: props.size || 20 }}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+  </svg>
+)
+
+export const ProjectBoardIcon = (props: React.SVGProps<SVGSVGElement> & { size?: number }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={props.className} style={{ width: props.size || 20, height: props.size || 20 }}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125Z" />
+  </svg>
+)
+
+
+
+
 
 

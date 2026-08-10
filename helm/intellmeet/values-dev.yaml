@@ -1,0 +1,34 @@
+# Development environment overrides for intellmeet chart
+
+global:
+  environment: development
+
+config:
+  clientUrl: "http://localhost:5173"
+
+frontend:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+
+backend:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+mongodb:
+  persistence:
+    size: 2Gi
+
+ingress:
+  host: "dev.intellmeet.local"

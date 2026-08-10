@@ -1,0 +1,54 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: intellmeet-ingress
+  labels:
+    app.kubernetes.io/name: intellmeet
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/websocket-services: "intellmeet-backend-service"
+spec:
+  rules:
+    - host: intellmeet.local
+      http:
+        paths:
+          # Backend API routes
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: intellmeet-backend-service
+                port:
+                  number: 3000
+          - path: /meetings
+            pathType: Prefix
+            backend:
+              service:
+                name: intellmeet-backend-service
+                port:
+                  number: 3000
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: intellmeet-backend-service
+                port:
+                  number: 3000
+          # Socket.io WebSocket path
+          - path: /socket.io
+            pathType: Prefix
+            backend:
+              service:
+                name: intellmeet-backend-service
+                port:
+                  number: 3000
+          # Frontend static app fallback
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: intellmeet-frontend-service
+                port:
+                  number: 80

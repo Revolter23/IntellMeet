@@ -3,6 +3,9 @@ import { api } from '../lib/api';
 import { useAuthStore } from '../store/useAuthStore';
 import { ShieldIcon, UsersIcon, VideoIcon, DatabaseIcon } from '../lib/icons';
 
+import { Button } from "@/components/ui/button"
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
+
 interface SystemUser {
   _id: string;
   name?: string;
@@ -63,36 +66,37 @@ export default function AdminPanel() {
 
   if (user?.systemRole !== 'SUPER_ADMIN') {
     return (
-      <div className="p-8 text-center bg-slate-900/50 border border-slate-800 rounded-2xl">
-        <h2 className="text-xl font-bold text-rose-400 mb-2">Access Denied</h2>
-        <p className="text-slate-400">Only Global System Super Admins have access to the platform management panel.</p>
-      </div>
+      <Card className="p-8 text-center bg-bg-surface border border-border-default rounded-2xl shadow-md gap-0">
+        <h2 className="text-xl font-bold text-status-danger mb-2">Access Denied</h2>
+        <p className="text-text-muted">Only Global System Super Admins have access to the platform management panel.</p>
+      </Card>
     );
   }
 
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-900 pb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border-subtle pb-6">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <div className="p-2 rounded-xl bg-indigo-600/10 border border-indigo-500/20 text-indigo-400">
+            <div className="p-2 rounded-xl bg-brand-primary/10 border border-border-brand/20 text-text-brand">
               <ShieldIcon />
             </div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">System Admin Panel</h1>
+            <h1 className="text-2xl font-bold text-text-primary tracking-tight">System Admin Panel</h1>
           </div>
-          <p className="text-sm text-slate-400">Global platform oversight, RBAC system role administration, and storage policies.</p>
+          <p className="text-sm text-text-muted">Global platform oversight, RBAC system role administration, and storage policies.</p>
         </div>
-        <button
+        <Button
+          variant="outline"
           onClick={fetchAdminData}
-          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 text-sm font-medium rounded-xl transition-all"
+          className="px-4 py-2 bg-bg-surface hover:bg-bg-surface-hover border border-border-default text-text-primary text-sm font-medium rounded-xl transition-all cursor-pointer"
         >
           Refresh Data
-        </button>
+        </Button>
       </div>
 
       {error && (
-        <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm rounded-xl">
+        <div className="p-4 bg-status-danger/10 border border-status-danger/20 text-status-danger text-sm rounded-xl">
           {error}
         </div>
       )}
@@ -100,95 +104,97 @@ export default function AdminPanel() {
       {/* Metrics Grid */}
       {stats && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          <div className="p-6 rounded-2xl bg-slate-900/40 border border-slate-900 backdrop-blur-xl flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+          <Card className="p-6 rounded-2xl bg-bg-surface border border-border-default flex flex-row items-center gap-4 shadow-sm gap-0">
+            <div className="p-3 rounded-xl bg-brand-primary/10 text-text-brand border border-border-brand/20 shrink-0">
               <UsersIcon />
             </div>
             <div>
-              <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Total Users</p>
-              <h3 className="text-2xl font-extrabold text-white mt-0.5">{stats.totalUsers}</h3>
+              <p className="text-xs text-text-muted font-semibold uppercase tracking-wider">Total Users</p>
+              <h3 className="text-2xl font-extrabold text-text-primary mt-0.5">{stats.totalUsers}</h3>
             </div>
-          </div>
+          </Card>
 
-          <div className="p-6 rounded-2xl bg-slate-900/40 border border-slate-900 backdrop-blur-xl flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-violet-500/10 text-violet-400 border border-violet-500/20">
+          <Card className="p-6 rounded-2xl bg-bg-surface border border-border-default flex flex-row items-center gap-4 shadow-sm gap-0">
+            <div className="p-3 rounded-xl bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/20 shrink-0">
               <DatabaseIcon />
             </div>
             <div>
-              <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Active Workspaces</p>
-              <h3 className="text-2xl font-extrabold text-white mt-0.5">{stats.totalWorkspaces}</h3>
+              <p className="text-xs text-text-muted font-semibold uppercase tracking-wider">Active Workspaces</p>
+              <h3 className="text-2xl font-extrabold text-text-primary mt-0.5">{stats.totalWorkspaces}</h3>
             </div>
-          </div>
+          </Card>
 
-          <div className="p-6 rounded-2xl bg-slate-900/40 border border-slate-900 backdrop-blur-xl flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          <Card className="p-6 rounded-2xl bg-bg-surface border border-border-default flex flex-row items-center gap-4 shadow-sm gap-0">
+            <div className="p-3 rounded-xl bg-status-success/10 text-status-success border border-status-success/20 shrink-0">
               <VideoIcon />
             </div>
             <div>
-              <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Total Meetings</p>
-              <h3 className="text-2xl font-extrabold text-white mt-0.5">{stats.totalMeetings}</h3>
+              <p className="text-xs text-text-muted font-semibold uppercase tracking-wider">Total Meetings</p>
+              <h3 className="text-2xl font-extrabold text-text-primary mt-0.5">{stats.totalMeetings}</h3>
             </div>
-          </div>
+          </Card>
         </div>
       )}
 
       {/* Global User Management Table */}
-      <div className="bg-slate-900/40 border border-slate-900 rounded-2xl overflow-hidden backdrop-blur-xl">
-        <div className="p-6 border-b border-slate-900 flex items-center justify-between">
-          <h2 className="font-bold text-base text-white">Global User RBAC Management</h2>
-          <span className="text-xs text-slate-500">{users.length} registered users</span>
-        </div>
+      <Card className="bg-bg-surface border border-border-default rounded-2xl overflow-hidden shadow-md gap-0 p-0">
+        <CardHeader className="p-6 border-b border-border-subtle flex flex-row items-center justify-between">
+          <CardTitle className="font-bold text-base text-text-primary">Global User RBAC Management</CardTitle>
+          <span className="text-xs text-text-muted">{users.length} registered users</span>
+        </CardHeader>
 
-        {loading ? (
-          <div className="p-8 text-center text-slate-500">Loading system users...</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-300">
-              <thead className="bg-slate-950/60 text-xs text-slate-500 uppercase tracking-wider border-b border-slate-900">
-                <tr>
-                  <th className="px-6 py-4">User</th>
-                  <th className="px-6 py-4">Email</th>
-                  <th className="px-6 py-4">Global System Role</th>
-                  <th className="px-6 py-4">Joined Date</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-900">
-                {users.map((u) => (
-                  <tr key={u._id} className="hover:bg-slate-900/30 transition-colors">
-                    <td className="px-6 py-4 flex items-center gap-3">
-                      {u.avatar ? (
-                        <img src={u.avatar} alt={u.name} className="h-8 w-8 rounded-lg object-cover" />
-                      ) : (
-                        <div className="h-8 w-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-bold text-xs">
-                          {u.name ? u.name[0].toUpperCase() : u.email[0].toUpperCase()}
-                        </div>
-                      )}
-                      <span className="font-medium text-slate-200">{u.name || 'User'}</span>
-                    </td>
-                    <td className="px-6 py-4 text-slate-400">{u.email}</td>
-                    <td className="px-6 py-4">
-                      <select
-                        value={u.systemRole}
-                        disabled={updatingUserId === u._id}
-                        onChange={(e) => handleRoleChange(u._id, e.target.value)}
-                        className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-1.5 focus:outline-none focus:border-indigo-500 transition-colors"
-                      >
-                        <option value="SUPER_ADMIN">System Super Admin</option>
-                        <option value="PLATFORM_ADMIN">Platform Admin</option>
-                        <option value="MEDIA_MANAGER">Compliance and Media Manager</option>
-                        <option value="PLATFORM_USER">Platform User</option>
-                      </select>
-                    </td>
-                    <td className="px-6 py-4 text-slate-500 text-xs">
-                      {new Date(u.createdAt).toLocaleDateString()}
-                    </td>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="p-8 text-center text-text-muted">Loading system users...</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-text-secondary">
+                <thead className="bg-bg-surface-hover/50 text-xs text-text-muted uppercase tracking-wider border-b border-border-subtle">
+                  <tr>
+                    <th className="px-6 py-4">User</th>
+                    <th className="px-6 py-4">Email</th>
+                    <th className="px-6 py-4">Global System Role</th>
+                    <th className="px-6 py-4">Joined Date</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                </thead>
+                <tbody className="divide-y divide-border-subtle">
+                  {users.map((u) => (
+                    <tr key={u._id} className="hover:bg-bg-surface-hover/40 transition-colors">
+                      <td className="px-6 py-4 flex items-center gap-3">
+                        {u.avatar ? (
+                          <img src={u.avatar} alt={u.name} className="h-8 w-8 rounded-lg object-cover border border-border-subtle" />
+                        ) : (
+                          <div className="h-8 w-8 rounded-lg bg-brand-primary/10 border border-border-brand/20 flex items-center justify-center text-text-brand font-bold text-xs">
+                            {u.name ? u.name[0].toUpperCase() : u.email[0].toUpperCase()}
+                          </div>
+                        )}
+                        <span className="font-medium text-text-primary">{u.name || 'User'}</span>
+                      </td>
+                      <td className="px-6 py-4 text-text-muted">{u.email}</td>
+                      <td className="px-6 py-4">
+                        <select
+                          value={u.systemRole}
+                          disabled={updatingUserId === u._id}
+                          onChange={(e) => handleRoleChange(u._id, e.target.value)}
+                          className="bg-bg-input border border-border-default text-text-primary text-xs rounded-xl px-3 py-1.5 focus:outline-none focus:border-border-brand transition-colors"
+                        >
+                          <option value="SUPER_ADMIN">System Super Admin</option>
+                          <option value="PLATFORM_ADMIN">Platform Admin</option>
+                          <option value="MEDIA_MANAGER">Compliance and Media Manager</option>
+                          <option value="PLATFORM_USER">Platform User</option>
+                        </select>
+                      </td>
+                      <td className="px-6 py-4 text-text-muted text-xs">
+                        {new Date(u.createdAt).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

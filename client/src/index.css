@@ -1,3 +1,4 @@
+@import "./globals.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -8,6 +9,64 @@
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: 'Figtree Variable', sans-serif;
+    
+    /* Brand Design Tokens */
+    --color-brand-primary: var(--brand-primary);
+    --color-brand-primary-hover: var(--brand-primary-hover);
+    --color-brand-primary-light: var(--brand-primary-light);
+    --color-brand-secondary: var(--brand-secondary);
+    --color-brand-cyan: var(--brand-cyan);
+    --color-brand-emerald: var(--brand-emerald);
+
+    /* Surface & App Backgrounds */
+    --color-bg-app: var(--bg-app);
+    --color-bg-surface: var(--bg-surface);
+    --color-bg-surface-hover: var(--bg-surface-hover);
+    --color-bg-sidebar: var(--bg-sidebar);
+    --color-bg-modal: var(--bg-modal);
+    --color-bg-dropdown: var(--bg-dropdown);
+    --color-bg-input: var(--bg-input);
+
+    /* Typography */
+    --color-text-primary: var(--text-primary);
+    --color-text-secondary: var(--text-secondary);
+    --color-text-muted: var(--text-muted);
+    --color-text-subtle: var(--text-subtle);
+    --color-text-inverse: var(--text-inverse);
+    --color-text-brand: var(--text-brand);
+
+    /* Borders */
+    --color-border-subtle: var(--border-subtle);
+    --color-border-default: var(--border-default);
+    --color-border-strong: var(--border-strong);
+    --color-border-brand: var(--border-brand);
+
+    /* Statuses */
+    --color-status-success: var(--status-success);
+    --color-status-warning: var(--status-warning);
+    --color-status-danger: var(--status-danger);
+    --color-status-info: var(--status-info);
+
+    /* Media Controls */
+    --color-media-mic-active: var(--media-mic-active);
+    --color-media-mic-muted: var(--media-mic-muted);
+    --color-media-cam-active: var(--media-cam-active);
+    --color-media-cam-muted: var(--media-cam-muted);
+    --color-media-screenshare: var(--media-screenshare);
+    --color-media-recording: var(--media-recording);
+    --color-media-endcall: var(--media-endcall);
+
+    /* Task Priorities & Board */
+    --color-priority-low: var(--priority-low);
+    --color-priority-medium: var(--priority-medium);
+    --color-priority-high: var(--priority-high);
+    --color-priority-urgent: var(--priority-urgent);
+    --color-board-todo: var(--board-todo);
+    --color-board-in-progress: var(--board-in-progress);
+    --color-board-review: var(--board-review);
+    --color-board-done: var(--board-done);
+
+    /* Shadcn standard theme variables */
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -119,12 +178,49 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
-    }
+    @apply border-border;
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--brand-primary, #818cf8);
+    outline-offset: 2px;
+  }
+
   body {
     @apply bg-background text-foreground;
-    }
+  }
+
   html {
     @apply font-sans;
-    }
+  }
+}
+
+/* Accessibility Utilities */
+.skip-to-content {
+  position: absolute;
+  top: -100px;
+  left: 1rem;
+  z-index: 100;
+  padding: 0.75rem 1.25rem;
+  background-color: var(--brand-primary, #818cf8);
+  color: #0f172a;
+  font-weight: 700;
+  border-radius: 0.5rem;
+  transition: top 0.2s ease-in-out;
+}
+
+.skip-to-content:focus {
+  top: 1rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
