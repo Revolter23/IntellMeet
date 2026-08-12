@@ -164,8 +164,3 @@ docker-compose up --build
 ```
 Access the client at `http://localhost:80` and server at `http://localhost:3000`.
 
----
-
-## 📜 License
-
-This project is licensed under the ISC License.
