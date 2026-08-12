@@ -6,15 +6,12 @@ on:
   pull_request:
     branches: [ "main", "develop" ]
 
-env:
-  REGISTRY: ghcr.io
-
 jobs:
   # ==========================================
-  # STAGE 1: Testing & Linting
+  # Code Testing & Build Validation
   # ==========================================
-  test-and-lint:
-    name: Test & Lint
+  test-and-validate:
+    name: Test & Build Validation
     runs-on: ubuntu-latest
 
     steps:
@@ -30,145 +27,16 @@ jobs:
             client/package-lock.json
             server/package-lock.json
 
-      - name: Install & Lint Client
+      - name: Install & Build Frontend Client (Vercel Validation)
         run: |
           cd client
           npm ci
           npm run build
 
-      - name: Install & Validate Server
+      - name: Install & Validate Backend Server (Render Validation)
         run: |
           cd server
           npm ci
           node --check index.js
 
-      - name: Lint Helm Chart
-        uses: azure/setup-helm@v4
-        with:
-          version: 'v3.14.0'
-      - run: helm lint ./helm/intellmeet
-
-  # ==========================================
-  # STAGE 2: Container Image Build & Push
-  # ==========================================
-  build-and-push:
-    name: Build & Push Docker Images
-    needs: test-and-lint
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set lower-case image names for GHCR
-        run: |
-          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          echo "IMAGE_CLIENT=ghcr.io/${REPO_LOWER}/intellmeet-client" >> $GITHUB_ENV
-          echo "IMAGE_SERVER=ghcr.io/${REPO_LOWER}/intellmeet-server" >> $GITHUB_ENV
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract Metadata (Client)
-        id: meta-client
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_CLIENT }}
-          tags: |
-            type=sha,prefix=
-            type=ref,event=branch
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-
-      - name: Build & Push Frontend Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./client
-          file: ./client/Dockerfile
-          push: true
-          tags: ${{ steps.meta-client.outputs.tags }}
-          labels: ${{ steps.meta-client.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Extract Metadata (Server)
-        id: meta-server
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_SERVER }}
-          tags: |
-            type=sha,prefix=
-            type=ref,event=branch
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-
-      - name: Build & Push Backend Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./server
-          file: ./server/Dockerfile
-          push: true
-          tags: ${{ steps.meta-server.outputs.tags }}
-          labels: ${{ steps.meta-server.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # ==========================================
-  # STAGE 3: Deployment (Kubernetes / Helm)
-  # ==========================================
-  deploy:
-    name: Deploy to Kubernetes (Helm)
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set lower-case image names for GHCR
-        run: |
-          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          echo "IMAGE_CLIENT=ghcr.io/${REPO_LOWER}/intellmeet-client" >> $GITHUB_ENV
-          echo "IMAGE_SERVER=ghcr.io/${REPO_LOWER}/intellmeet-server" >> $GITHUB_ENV
-
-      - name: Setup Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: 'v3.14.0'
-
-      - name: Configure Kubeconfig
-        run: |
-          if [ -z "${{ secrets.KUBECONFIG }}" ]; then
-            echo "::error::KUBECONFIG secret is missing in GitHub Repository Secrets! Please add KUBECONFIG in Settings > Secrets and variables > Actions."
-            exit 1
-          fi
-          mkdir -p ~/.kube
-          if echo "${{ secrets.KUBECONFIG }}" | base64 -d > /dev/null 2>&1; then
-            echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
-          else
-            echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
-          fi
-          chmod 600 ~/.kube/config
-
-      - name: Deploy IntellMeet Helm Release
-        run: |
-          helm upgrade --install intellmeet ./helm/intellmeet \
-            --namespace intellmeet \
-            --create-namespace \
-            -f ./helm/intellmeet/values-prod.yaml \
-            --set frontend.image.repository=${{ env.IMAGE_CLIENT }} \
-            --set frontend.image.tag=${{ github.sha }} \
-            --set backend.image.repository=${{ env.IMAGE_SERVER }} \
-            --set backend.image.tag=${{ github.sha }}
 
