@@ -99,14 +99,16 @@ const io = new Server(httpServer, {
     }
 });
 
-// Attach Redis Adapter to Socket.io for seamless multi-instance horizontal scaling
-if (pubClient && subClient) {
+// Attach Redis Adapter to Socket.io for seamless multi-instance horizontal scaling (if Redis is active)
+if (isRedisConnected && pubClient?.isOpen && subClient?.isOpen) {
     try {
         io.adapter(createAdapter(pubClient, subClient));
         console.log('⚡ Socket.io Redis Adapter enabled for multi-instance scaling.');
     } catch (adapterErr) {
         console.warn('⚠️ Socket.io Redis Adapter setup warning:', adapterErr.message);
     }
+} else {
+    console.log('ℹ Socket.io operating with in-memory adapter.');
 }
 
 // Expose io instance to Express request handlers
@@ -233,6 +235,7 @@ io.on('connection', (socket) => {
 
         // Send list of all existing users to the joining client
         socket.emit('all-users', usersInRoom);
+        socket.emit('existing-users', usersInRoom);
     });
 
     // WebRTC Offer: relay from caller to target socket
@@ -474,6 +477,12 @@ io.on('connection', (socket) => {
         }
     });
 
+    // End Meeting: Host ends meeting for all participants in room
+    socket.on('end-meeting', async ({ meetingCode }) => {
+        if (!meetingCode) return;
+        console.log(`Host ending meeting: ${meetingCode}`);
+        socket.to(meetingCode).emit('meeting-ended');
+    });
 
     // Handle user disconnect
 
@@ -509,16 +518,7 @@ io.on('connection', (socket) => {
 
         if (room) {
             // Notify other participants in the meeting room that the user left
-            socket.to(room).emit('user-left', socket.id);
-
-            // Broadcast real-time notification
-            socket.to(room).emit('receive-notification', {
-                id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
-                type: 'user-left',
-                title: 'Participant Left',
-                message: `${user ? (user.name || user.email) : 'A participant'} left the meeting`,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            });
+            socket.to(room).emit('user-left', { socketId: socket.id, user: user });
         }
         if (user) {
             console.log(`User ${user.email} (${socket.id}) disconnected`);

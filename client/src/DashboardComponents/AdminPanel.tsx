@@ -104,7 +104,7 @@ export default function AdminPanel() {
       {/* Metrics Grid */}
       {stats && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          <Card className="p-6 rounded-2xl bg-bg-surface border border-border-default flex flex-row items-center gap-4 shadow-sm gap-0">
+          <Card className="p-6 rounded-2xl bg-bg-surface border border-border-default flex flex-row items-center gap-4 shadow-sm">
             <div className="p-3 rounded-xl bg-brand-primary/10 text-text-brand border border-border-brand/20 shrink-0">
               <UsersIcon />
             </div>
@@ -114,7 +114,7 @@ export default function AdminPanel() {
             </div>
           </Card>
 
-          <Card className="p-6 rounded-2xl bg-bg-surface border border-border-default flex flex-row items-center gap-4 shadow-sm gap-0">
+          <Card className="p-6 rounded-2xl bg-bg-surface border border-border-default flex flex-row items-center gap-4 shadow-sm">
             <div className="p-3 rounded-xl bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/20 shrink-0">
               <DatabaseIcon />
             </div>
@@ -124,7 +124,7 @@ export default function AdminPanel() {
             </div>
           </Card>
 
-          <Card className="p-6 rounded-2xl bg-bg-surface border border-border-default flex flex-row items-center gap-4 shadow-sm gap-0">
+          <Card className="p-6 rounded-2xl bg-bg-surface border border-border-default flex flex-row items-center gap-4 shadow-sm">
             <div className="p-3 rounded-xl bg-status-success/10 text-status-success border border-status-success/20 shrink-0">
               <VideoIcon />
             </div>

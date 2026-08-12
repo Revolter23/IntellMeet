@@ -11,7 +11,16 @@ export const authenticateToken = async (req, res, next) => {
             return res.status(401).json({ message: 'Access token missing' });
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+        let decoded;
+        try {
+            decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+        } catch (jwtErr) {
+            if (jwtErr.name === 'TokenExpiredError') {
+                return res.status(401).json({ message: 'Access token expired', code: 'TOKEN_EXPIRED' });
+            }
+            return res.status(401).json({ message: 'Invalid access token', code: 'INVALID_TOKEN' });
+        }
+
         const userId = decoded.user;
         const cacheKey = `user:${userId}`;
 
@@ -31,7 +40,7 @@ export const authenticateToken = async (req, res, next) => {
         // 2. Cache miss or Redis offline -> Query MongoDB
         const user = await User.findById(userId);
         if (!user) {
-            return res.status(404).json({ message: 'User not found' });
+            return res.status(401).json({ message: 'User not found' });
         }
 
         // 3. Cache the user object in Redis if connected
@@ -49,6 +58,6 @@ export const authenticateToken = async (req, res, next) => {
         next();
     } catch (error) {
         console.error("Auth middleware error:", error);
-        return res.status(403).json({ message: 'Invalid or expired access token' });
+        return res.status(401).json({ message: 'Authentication failed' });
     }
 };

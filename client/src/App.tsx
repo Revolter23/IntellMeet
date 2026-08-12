@@ -1,22 +1,24 @@
 import './App.css'
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, Link, Navigate } from 'react-router'
 import Login from './AuthComponents/Login'
 import SignUp from './AuthComponents/SignUp'
 import Dashboard from './DashboardComponents/Dashboard'
-import Profile from './DashboardComponents/Profile'
 import Layout from './DashboardComponents/Layout'
-import AdminPanel from './DashboardComponents/AdminPanel'
-import WorkspaceView from './DashboardComponents/WorkspaceView'
-import ProjectBoardView from './DashboardComponents/ProjectBoardView'
-import MeetingRoom from './MeetingComponent/MeetingRoom'
-import MyMeetings from './MeetingComponent/MyMeetings'
-import PostMeetingDashboard from './MeetingComponent/PostMeetingDashboard'
-import ScheduleView from './MeetingComponent/ScheduleView'
+import Loading from './Loading'
 import { useAuthStore } from './store/useAuthStore'
 import { NotificationProvider } from './context/NotificationContext'
 import ToastContainer from './components/ToastContainer'
 
+// Lazy load components for route code splitting
+const Profile = lazy(() => import('./DashboardComponents/Profile'))
+const AdminPanel = lazy(() => import('./DashboardComponents/AdminPanel'))
+const WorkspaceView = lazy(() => import('./DashboardComponents/WorkspaceView'))
+const ProjectBoardView = lazy(() => import('./DashboardComponents/ProjectBoardView'))
+const ScheduleView = lazy(() => import('./MeetingComponent/ScheduleView'))
+const MyMeetings = lazy(() => import('./MeetingComponent/MyMeetings'))
+const PostMeetingDashboard = lazy(() => import('./MeetingComponent/PostMeetingDashboard'))
+const MeetingRoom = lazy(() => import('./MeetingComponent/MeetingRoom'))
 
 function Home() {
   const { accessToken, user } = useAuthStore()
@@ -147,19 +149,70 @@ function App() {
           }
         >
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/admin" element={<AdminPanel />} />
-          <Route path="/workspace" element={<WorkspaceView />} />
-          <Route path="/workspace/board" element={<ProjectBoardView />} />
-          <Route path="/schedule" element={<ScheduleView />} />
-          <Route path="/meetings/history" element={<MyMeetings />} />
-          <Route path="/meetings/history/:meetingCode" element={<PostMeetingDashboard />} />
+          <Route
+            path="/profile"
+            element={
+              <Suspense fallback={<Loading>Opening your profile...</Loading>}>
+                <Profile />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <Suspense fallback={<Loading>Loading Admin Panel...</Loading>}>
+                <AdminPanel />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/workspace"
+            element={
+              <Suspense fallback={<Loading>Loading Workspace...</Loading>}>
+                <WorkspaceView />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/workspace/board"
+            element={
+              <Suspense fallback={<Loading>Loading Project Board...</Loading>}>
+                <ProjectBoardView />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/schedule"
+            element={
+              <Suspense fallback={<Loading>Loading Schedule...</Loading>}>
+                <ScheduleView />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/meetings/history"
+            element={
+              <Suspense fallback={<Loading>Loading My Meetings...</Loading>}>
+                <MyMeetings />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/meetings/history/:meetingCode"
+            element={
+              <Suspense fallback={<Loading>Loading Post Meeting Dashboard...</Loading>}>
+                <PostMeetingDashboard />
+              </Suspense>
+            }
+          />
         </Route>
         <Route
           path="/meetings/:meetingCode"
           element={
             <ProtectedRoute>
-              <MeetingRoom />
+              <Suspense fallback={<Loading>Joining Meeting Room...</Loading>}>
+                <MeetingRoom />
+              </Suspense>
             </ProtectedRoute>
           }
         />

@@ -1,5 +1,6 @@
 import { Workspace } from '../models/WorkspaceModel.js';
 import { Meeting } from '../models/MeetingModel.js';
+import { Board } from '../models/BoardModel.js';
 
 /**
  * Global Scope RBAC Guard
@@ -26,7 +27,14 @@ export const requireSystemRole = (...allowedRoles) => {
 export const requireWorkspacePermission = (requiredPermission, allowedRoles = ['WORKSPACE_OWNER', 'WORKSPACE_ADMIN']) => {
     return async (req, res, next) => {
         try {
-            const workspaceId = req.params.workspaceId || req.body.workspaceId || req.query.workspaceId;
+            let workspaceId = req.params.workspaceId || req.body.workspaceId || req.query.workspaceId;
+            if (!workspaceId && req.body.boardId) {
+                const targetBoard = await Board.findById(req.body.boardId);
+                if (targetBoard) {
+                    workspaceId = targetBoard.workspace.toString();
+                }
+            }
+
             if (!workspaceId) {
                 return res.status(400).json({ message: 'Workspace ID is required' });
             }

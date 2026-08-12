@@ -206,6 +206,71 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 /**
+ * @route   GET /meetings/history
+ * @desc    Get all meeting history records for authenticated user
+ * @access  Private
+ */
+router.get('/history', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const meetings = await Meeting.find({
+            $or: [
+                { host: userId },
+                { 'participants.user': userId }
+            ]
+        })
+        .populate('host', 'name email avatar')
+        .populate('participants.user', 'name email avatar')
+        .populate('transcript.speaker', 'name email avatar')
+        .populate('actionItems.assignee', 'name email avatar')
+        .sort({ startTime: -1 });
+
+        res.json({ meetings });
+    } catch (error) {
+        console.error('Error fetching meeting history:', error);
+        res.status(500).json({ message: 'Error fetching meeting history' });
+    }
+});
+
+/**
+ * @route   GET /meetings/history/:meetingCode
+ * @desc    Get post-meeting dashboard insights & summary for a specific meeting
+ * @access  Private
+ */
+router.get('/history/:meetingCode', authenticateToken, async (req, res) => {
+    try {
+        const { meetingCode } = req.params;
+        const userId = req.user.id;
+
+        const meeting = await Meeting.findOne({ meetingCode })
+            .populate('host', 'name email avatar')
+            .populate('participants.user', 'name email avatar')
+            .populate('transcript.speaker', 'name email avatar')
+            .populate('actionItems.assignee', 'name email avatar');
+
+        if (!meeting) {
+            return res.status(404).json({ message: 'Meeting details could not be found' });
+        }
+
+        // Verify access permission
+        const hostId = meeting.host._id ? meeting.host._id.toString() : meeting.host.toString();
+        const isParticipant = meeting.participants.some(p => {
+            const pUserId = p.user?._id ? p.user._id.toString() : p.user?.toString();
+            return pUserId === userId;
+        });
+
+        if (hostId !== userId && !isParticipant && meeting.isPrivate) {
+            return res.status(403).json({ message: 'Access denied to meeting history' });
+        }
+
+        res.json({ meeting });
+    } catch (error) {
+        console.error('Error fetching meeting history details:', error);
+        res.status(500).json({ message: 'Internal server error fetching meeting history details' });
+    }
+});
+
+/**
  * @route   GET /meetings/:meetingCode
  * @desc    Get meeting details by its unique room/meeting code
  * @access  Private

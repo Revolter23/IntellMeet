@@ -8,8 +8,10 @@ export const createNotification = async (io, { userId, title, message, type = 'i
     try {
         if (!userId) return null;
 
+        const userIdStr = typeof userId === 'object' && userId ? userId.toString() : String(userId);
+
         const notif = new Notification({
-            user: userId,
+            user: userIdStr,
             title,
             message,
             type,
@@ -19,16 +21,20 @@ export const createNotification = async (io, { userId, title, message, type = 'i
         await notif.save();
 
         if (io) {
-            io.to(`user:${userId}`).emit('receive-user-notification', {
-                id: notif._id.toString(),
-                title: notif.title,
-                message: notif.message,
-                type: notif.type,
-                link: notif.link,
-                read: false,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                createdAt: notif.createdAt
-            });
+            try {
+                io.to(`user:${userIdStr}`).emit('receive-user-notification', {
+                    id: notif._id.toString(),
+                    title: notif.title,
+                    message: notif.message,
+                    type: notif.type,
+                    link: notif.link,
+                    read: false,
+                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    createdAt: notif.createdAt
+                });
+            } catch (socketErr) {
+                console.warn("Real-time socket notification emit warning:", socketErr?.message || socketErr);
+            }
         }
 
         return notif;

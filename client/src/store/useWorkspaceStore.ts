@@ -3,15 +3,17 @@ import { api } from '../lib/api';
 
 export type WorkspaceRole = 'WORKSPACE_OWNER' | 'WORKSPACE_ADMIN' | 'MEMBER' | 'GUEST';
 
+export interface UserProfile {
+  _id: string;
+  name?: string;
+  email: string;
+  avatar?: string;
+  systemRole?: string;
+}
+
 export interface WorkspaceMember {
   _id: string;
-  user: {
-    _id: string;
-    name?: string;
-    email: string;
-    avatar?: string;
-    systemRole?: string;
-  };
+  user: UserProfile;
   role: WorkspaceRole;
   customPermissions: string[];
   joinedAt: string;

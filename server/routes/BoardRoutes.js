@@ -181,7 +181,11 @@ router.post('/tasks',
             // Socket.io broadcast to live board subscribers
             const io = req.app.get('io');
             if (io) {
-                io.to(`board:${boardId}`).emit('task:created', populatedTask);
+                try {
+                    io.to(`board:${boardId}`).emit('task:created', populatedTask);
+                } catch (socketErr) {
+                    console.warn("Socket broadcast warning (task:created):", socketErr?.message || socketErr);
+                }
             }
 
             res.status(201).json(populatedTask);
@@ -254,27 +258,35 @@ router.post('/tasks/from-action-item',
 
             const io = req.app.get('io');
             if (io) {
-                io.to(`board:${boardId}`).emit('task:created', populatedTask);
-
-                // Dispatch notification for assigned user and parse @mentions
-                const { createNotification, parseAndNotifyMentions } = await import('../services/notificationService.js');
-                if (assigneeId && assigneeId.toString() !== req.user.id) {
-                    await createNotification(io, {
-                        userId: assigneeId,
-                        title: '⚡ Action Item Task Assigned',
-                        message: `${req.user.name || req.user.email} assigned you a task: "${title}"`,
-                        type: 'action_item',
-                        link: '/workspace/board'
-                    });
+                try {
+                    io.to(`board:${boardId}`).emit('task:created', populatedTask);
+                } catch (socketErr) {
+                    console.warn("Socket broadcast warning (task:created):", socketErr?.message || socketErr);
                 }
 
-                await parseAndNotifyMentions(io, {
-                    text: `${title} ${description || ''}`,
-                    senderUser: req.user,
-                    contextTitle: 'Workspace Task',
-                    link: '/workspace/board',
-                    type: 'mention'
-                });
+                // Dispatch notification for assigned user and parse @mentions
+                try {
+                    const { createNotification, parseAndNotifyMentions } = await import('../services/notificationService.js');
+                    if (assigneeId && assigneeId.toString() !== req.user.id) {
+                        await createNotification(io, {
+                            userId: assigneeId,
+                            title: '⚡ Action Item Task Assigned',
+                            message: `${req.user.name || req.user.email} assigned you a task: "${title}"`,
+                            type: 'action_item',
+                            link: '/workspace/board'
+                        });
+                    }
+
+                    await parseAndNotifyMentions(io, {
+                        text: `${title} ${description || ''}`,
+                        senderUser: req.user,
+                        contextTitle: 'Workspace Task',
+                        link: '/workspace/board',
+                        type: 'mention'
+                    });
+                } catch (notifErr) {
+                    console.warn("Non-blocking task notification error:", notifErr?.message || notifErr);
+                }
             }
 
             res.status(201).json({
@@ -308,12 +320,16 @@ router.put('/tasks/:taskId/move', authenticateToken, async (req, res) => {
         // Socket.io broadcast task move
         const io = req.app.get('io');
         if (io) {
-            io.to(`board:${boardId}`).emit('task:moved', {
-                taskId,
-                destinationColumnId,
-                newPosition,
-                task: updatedTask
-            });
+            try {
+                io.to(`board:${boardId}`).emit('task:moved', {
+                    taskId,
+                    destinationColumnId,
+                    newPosition,
+                    task: updatedTask
+                });
+            } catch (socketErr) {
+                console.warn("Socket broadcast warning (task:moved):", socketErr?.message || socketErr);
+            }
         }
 
         res.json(updatedTask);
@@ -336,7 +352,11 @@ router.delete('/tasks/:taskId',
 
             const io = req.app.get('io');
             if (io) {
-                io.to(`board:${task.board}`).emit('task:deleted', { taskId: req.params.taskId });
+                try {
+                    io.to(`board:${task.board}`).emit('task:deleted', { taskId: req.params.taskId });
+                } catch (socketErr) {
+                    console.warn("Socket broadcast warning (task:deleted):", socketErr?.message || socketErr);
+                }
             }
 
             res.json({ message: 'Task deleted successfully', taskId: req.params.taskId });

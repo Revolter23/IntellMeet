@@ -27,8 +27,8 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // Check if the error is 401 (Unauthorized) and the request hasn't been retried yet
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Check if the error is 401/403 (Unauthorized / Expired) and request hasn't been retried yet
+    if ((error.response?.status === 401 || error.response?.status === 403) && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {

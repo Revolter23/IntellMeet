@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input"
 
 interface User {
 	id: string;
+	_id?: string;
 	name: string;
 	email: string;
 	avatar?: string;
@@ -73,6 +74,16 @@ export default function MeetingRoom() {
 	const [copied, setCopied] = useState(false)
 	const [showParticipants, setShowParticipants] = useState(false)
 
+	// Floating In-Meeting Room Alert (does not trigger persistent user notifications)
+	const [roomAlert, setRoomAlert] = useState<{ id: string; message: string } | null>(null)
+
+	const triggerRoomAlert = (message: string) => {
+		setRoomAlert({ id: Date.now().toString(), message })
+		setTimeout(() => {
+			setRoomAlert(null)
+		}, 4000)
+	}
+
 	// Chat States & Refs
 	const [showChat, setShowChat] = useState(false)
 	const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -100,9 +111,94 @@ export default function MeetingRoom() {
 
 	// Media States
 	const [localStream, setLocalStream] = useState<MediaStream | null>(null)
-	const [isAudioMuted, setIsAudioMuted] = useState(false)
-	const [isVideoMuted, setIsVideoMuted] = useState(false)
+	const [isAudioMuted, setIsAudioMuted] = useState(true) // Default muted until joined
+	const [isVideoMuted, setIsVideoMuted] = useState(true) // Default camera off until joined
 	const [isScreenSharing, setIsScreenSharing] = useState(false)
+
+	// Pre-join Device Configuration Modal States
+	const [hasJoinedRoom, setHasJoinedRoom] = useState(false)
+	const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([])
+	const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([])
+	const [selectedAudioId, setSelectedAudioId] = useState<string>('')
+	const [selectedVideoId, setSelectedVideoId] = useState<string>('')
+	const [preJoinMicOn, setPreJoinMicOn] = useState(false) // Keep Mic OFF by default
+	const [preJoinCameraOn, setPreJoinCameraOn] = useState(false) // Keep Camera OFF by default
+	const [previewStream, setPreviewStream] = useState<MediaStream | null>(null)
+
+	// Enumerate Mic & Camera devices when in Pre-Join Modal
+	useEffect(() => {
+		if (hasJoinedRoom) return;
+
+		const detectDevices = async () => {
+			try {
+				const devices = await navigator.mediaDevices.enumerateDevices();
+				const audioInputs = devices.filter(d => d.kind === 'audioinput');
+				const videoInputs = devices.filter(d => d.kind === 'videoinput');
+
+				setAudioDevices(audioInputs);
+				setVideoDevices(videoInputs);
+
+				if (audioInputs.length > 0 && !selectedAudioId) {
+					setSelectedAudioId(audioInputs[0].deviceId);
+				}
+				if (videoInputs.length > 0 && !selectedVideoId) {
+					setSelectedVideoId(videoInputs[0].deviceId);
+				}
+			} catch (err) {
+				console.error("Error enumerating devices:", err);
+			}
+		};
+
+		detectDevices();
+
+		navigator.mediaDevices.addEventListener('devicechange', detectDevices);
+		return () => {
+			navigator.mediaDevices.removeEventListener('devicechange', detectDevices);
+		};
+	}, [hasJoinedRoom, selectedAudioId, selectedVideoId]);
+
+	// Camera Preview in Pre-Join Modal
+	useEffect(() => {
+		let activePreview = true;
+		let streamInstance: MediaStream | null = null;
+
+		if (!hasJoinedRoom && preJoinCameraOn && videoDevices.length > 0) {
+			const videoConstraints = selectedVideoId ? { deviceId: { exact: selectedVideoId } } : true;
+			navigator.mediaDevices.getUserMedia({ video: videoConstraints })
+				.then(stream => {
+					if (!activePreview) {
+						stream.getTracks().forEach(t => t.stop());
+						return;
+					}
+					streamInstance = stream;
+					setPreviewStream(stream);
+				})
+				.catch(err => {
+					console.error("Camera preview failed:", err);
+					setPreJoinCameraOn(false);
+				});
+		} else {
+			if (previewStream) {
+				previewStream.getTracks().forEach(t => t.stop());
+				setPreviewStream(null);
+			}
+		}
+
+		return () => {
+			activePreview = false;
+			if (streamInstance) {
+				streamInstance.getTracks().forEach(t => t.stop());
+			}
+		};
+	}, [hasJoinedRoom, preJoinCameraOn, selectedVideoId, videoDevices.length]);
+
+	const handleConfirmJoin = () => {
+		if (previewStream) {
+			previewStream.getTracks().forEach(t => t.stop());
+			setPreviewStream(null);
+		}
+		setHasJoinedRoom(true);
+	};
 
 	// Recording States & References
 	const [isRecording, setIsRecording] = useState(false)
@@ -285,6 +381,13 @@ export default function MeetingRoom() {
 		}
 	};
 
+	const isHostUser = (u: any) => {
+		if (!meeting || !u) return false;
+		const hostId = meeting.host?._id || meeting.host?.id || (typeof meeting.host === 'string' ? meeting.host : null);
+		const targetId = u._id || u.id || (typeof u === 'string' ? u : null);
+		return !!(hostId && targetId && hostId.toString() === targetId.toString());
+	};
+
 	// 1. Fetch meeting info from Backend on mount
 	useEffect(() => {
 		const fetchMeeting = async () => {
@@ -303,40 +406,48 @@ export default function MeetingRoom() {
 		fetchMeeting()
 	}, [meetingCode])
 
-	// 2. Initialize WebRTC, Local Media, and Socket Connections
+	// 2. Initialize WebRTC, Local Media, and Socket Connections once joined
 	useEffect(() => {
-		if (loading || error || !user || !meetingCode) return;
+		if (loading || error || !user || !meetingCode || !hasJoinedRoom) return;
 
 		let active = true;
 
 		const startCall = async () => {
 			try {
-				const searchParams = new URLSearchParams(window.location.search);
-				const isAudioParamFalse = searchParams.get("audio") === "false";
-				const isVideoParamFalse = searchParams.get("video") === "false";
-				const selectedAudioId = searchParams.get("audioId");
-				const selectedVideoId = searchParams.get("videoId");
-
-				const videoConstraints: boolean | MediaTrackConstraints = selectedVideoId
+				const videoConstraints: boolean | MediaTrackConstraints = (videoDevices.length > 0 && selectedVideoId)
 					? { deviceId: { exact: selectedVideoId } }
-					: true;
+					: videoDevices.length > 0;
 
 				const audioConstraints: boolean | MediaTrackConstraints = selectedAudioId
 					? { deviceId: { exact: selectedAudioId } }
 					: true;
 
-				const stream = await navigator.mediaDevices.getUserMedia({
-					video: videoConstraints,
-					audio: audioConstraints
-				});
+				let stream: MediaStream;
+				try {
+					stream = await navigator.mediaDevices.getUserMedia({
+						video: videoDevices.length > 0 && preJoinCameraOn ? videoConstraints : false,
+						audio: audioConstraints
+					});
+				} catch (err) {
+					console.warn("Retrying getUserMedia with audio-only fallback:", err);
+					stream = await navigator.mediaDevices.getUserMedia({
+						video: false,
+						audio: true
+					});
+				}
 
-				if (isAudioParamFalse) {
+				if (!preJoinMicOn) {
 					stream.getAudioTracks().forEach(track => { track.enabled = false; });
 					setIsAudioMuted(true);
+				} else {
+					setIsAudioMuted(false);
 				}
-				if (isVideoParamFalse) {
+
+				if (!preJoinCameraOn || videoDevices.length === 0) {
 					stream.getVideoTracks().forEach(track => { track.enabled = false; });
 					setIsVideoMuted(true);
+				} else {
+					setIsVideoMuted(false);
 				}
 
 				if (!active) {
@@ -355,23 +466,35 @@ export default function MeetingRoom() {
 				socketRef.current.emit("join-room", {
 					meetingCode,
 					user: {
-						id: user.id,
+						id: user.id || (user as any)._id,
+						_id: (user as any)._id || user.id,
 						name: user.name,
 						email: user.email,
 						avatar: user.avatar
 					}
 				})
 
-				socketRef.current.on("existing-users", async (usersInRoom: { socketId: string; user: User }[]) => {
+				const handleExistingUsers = async (usersInRoom: { socketId: string; user: User }[]) => {
 					console.log("Existing users in room:", usersInRoom)
-					setRemotePeers(usersInRoom.map(u => ({
+					const uniqueUsers: { socketId: string; user: User }[] = [];
+					const seenIds = new Set<string>();
+
+					for (const u of usersInRoom) {
+						const uId = u.user?._id || (u.user as any)?.id || u.socketId;
+						if (!seenIds.has(uId)) {
+							seenIds.add(uId);
+							uniqueUsers.push(u);
+						}
+					}
+
+					setRemotePeers(uniqueUsers.map(u => ({
 						socketId: u.socketId,
 						user: u.user,
 						isAudioMuted: false,
 						isVideoMuted: false
 					})))
 
-					for (const remote of usersInRoom) {
+					for (const remote of uniqueUsers) {
 						const pc = createPeerConnection(remote.socketId, remote.user)
 						peersRef.current[remote.socketId] = pc;
 
@@ -389,13 +512,21 @@ export default function MeetingRoom() {
 							offer
 						})
 					}
-				})
+				}
+
+				socketRef.current.on("all-users", handleExistingUsers)
+				socketRef.current.on("existing-users", handleExistingUsers)
 
 				socketRef.current.on("user-joined", ({ socketId, user: joinedUser }: { socketId: string; user: User }) => {
 					console.log("New user joined room:", joinedUser)
+					const joinedUserId = joinedUser?._id || (joinedUser as any)?.id;
 					setRemotePeers(prev => {
-						if (prev.some(p => p.socketId === socketId)) return prev;
-						return [...prev, {
+						const filtered = prev.filter(p => {
+							if (p.socketId === socketId) return false;
+							if (joinedUserId && ((p.user as any)?._id === joinedUserId || (p.user as any)?.id === joinedUserId)) return false;
+							return true;
+						});
+						return [...filtered, {
 							socketId,
 							user: joinedUser,
 							isAudioMuted: false,
@@ -405,7 +536,7 @@ export default function MeetingRoom() {
 				})
 
 				socketRef.current.on("offer", async ({ from, offer, user: offerUser }: { from: string; offer: RTCSessionDescriptionInit; user: User }) => {
-					console.log("Received WebRTC offer from:", offerUser.email)
+					console.log("Received WebRTC offer from:", offerUser?.email)
 					let pc = peersRef.current[from]
 					if (!pc) {
 						pc = createPeerConnection(from, offerUser)
@@ -450,13 +581,46 @@ export default function MeetingRoom() {
 					}
 				})
 
-				socketRef.current.on("user-left", ({ socketId }: { socketId: string }) => {
-					console.log("User left room:", socketId)
-					if (peersRef.current[socketId]) {
-						peersRef.current[socketId].close()
-						delete peersRef.current[socketId]
+				socketRef.current.on("user-left", (data: any) => {
+					const leftSocketId = typeof data === 'string' ? data : data?.socketId;
+					const leftUser = typeof data === 'object' ? data?.user : null;
+					const leftUserId = leftUser?._id || leftUser?.id;
+					const userName = leftUser ? (leftUser.name || leftUser.email) : 'A participant';
+
+					console.log("User left room:", leftSocketId, leftUserId)
+
+					if (leftSocketId && peersRef.current[leftSocketId]) {
+						peersRef.current[leftSocketId].close()
+						delete peersRef.current[leftSocketId]
 					}
-					setRemotePeers(prev => prev.filter(p => p.socketId !== socketId))
+
+					setRemotePeers(prev => prev.filter(p => {
+						if (leftSocketId && p.socketId === leftSocketId) return false;
+						if (leftUserId && ((p.user as any)?._id === leftUserId || (p.user as any)?.id === leftUserId)) return false;
+						return true;
+					}))
+
+					// Show floating in-meeting alert box only (no persistent user notification)
+					triggerRoomAlert(`🚪 ${userName} left the meeting`);
+				})
+
+				socketRef.current.on("meeting-ended", () => {
+					console.log("Meeting was ended by host")
+					if (localStreamRef.current) {
+						localStreamRef.current.getTracks().forEach(track => track.stop())
+					}
+					if (screenStreamRef.current) {
+						screenStreamRef.current.getTracks().forEach(track => track.stop())
+					}
+					for (const id in peersRef.current) {
+						peersRef.current[id].close()
+					}
+					peersRef.current = {}
+					if (socketRef.current) {
+						socketRef.current.disconnect()
+					}
+					alert("The host has ended the meeting for all participants.")
+					navigate(`/meetings/history/${meetingCode}`)
 				})
 
 				socketRef.current.on("user-media-toggled", ({ socketId, isAudioMuted: audioMuted, isVideoMuted: videoMuted }: { socketId: string; isAudioMuted: boolean; isVideoMuted: boolean }) => {
@@ -536,7 +700,7 @@ export default function MeetingRoom() {
 				socketRef.current.disconnect()
 			}
 		}
-	}, [loading, error, user, meetingCode])
+	}, [loading, error, user, meetingCode, hasJoinedRoom])
 
 	const createPeerConnection = (targetSocketId: string, peerUser: User) => {
 		const pc = new RTCPeerConnection(ICE_SERVERS)
@@ -673,6 +837,9 @@ export default function MeetingRoom() {
 		}
 
 		try {
+			if (socketRef.current) {
+				socketRef.current.emit("end-meeting", { meetingCode })
+			}
 			if (meeting) {
 				await api.put(`/meetings/${meeting._id}`, {
 					status: 'completed',
@@ -731,7 +898,14 @@ export default function MeetingRoom() {
 			<div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] rounded-full bg-brand-secondary/5 blur-3xl pointer-events-none" />
 
 			{/* Top Bar Header */}
-			<header className="h-16 px-6 border-b border-border-default bg-bg-surface/80 backdrop-blur-xl flex items-center justify-between z-10 shadow-sm">
+			<header className="h-16 px-6 border-b border-border-default bg-bg-surface/80 backdrop-blur-xl flex items-center justify-between z-10 shadow-sm relative">
+				{/* Floating In-Meeting Alert Box */}
+				{roomAlert && (
+					<div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-bg-modal/95 border border-border-brand/40 text-text-primary text-xs font-semibold rounded-2xl shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2 flex items-center gap-2">
+						<span className="h-2 w-2 rounded-full bg-status-warning animate-ping" />
+						<span>{roomAlert.message}</span>
+					</div>
+				)}
 				<div className="flex items-center gap-3">
 					<div className="h-8 w-8 rounded-lg bg-brand-primary/10 border border-border-brand/20 flex items-center justify-center text-text-brand">
 						<SparklesIcon size={16} />
@@ -850,12 +1024,14 @@ export default function MeetingRoom() {
 										<img src={user.avatar} className="h-8 w-8 rounded-lg object-cover border border-border-subtle" />
 									) : (
 										<div className="h-8 w-8 rounded-lg bg-brand-primary/10 border border-border-brand/20 flex items-center justify-center text-xs font-bold text-text-brand">
-											{user?.name?.substring(0, 2).toUpperCase() || "ME"}
+											{user?.name ? (user.name.trim().split(/\s+/).length >= 2 ? (user.name.trim().split(/\s+/)[0][0] + user.name.trim().split(/\s+/)[1][0]).toUpperCase() : user.name.substring(0, 2).toUpperCase()) : "ME"}
 										</div>
 									)}
 									<div className="overflow-hidden">
-										<p className="text-xs font-semibold text-text-primary truncate">{user?.name} (You)</p>
-										<p className="text-[10px] text-text-muted truncate">Host</p>
+										<p className="text-xs font-semibold text-text-primary truncate">{user?.name || user?.email} (You)</p>
+										{isHostUser(user) && (
+											<p className="text-[10px] text-text-brand font-semibold truncate">Host</p>
+										)}
 									</div>
 								</div>
 								<div className="flex gap-1.5">
@@ -869,31 +1045,41 @@ export default function MeetingRoom() {
 							</div>
 
 							{/* Remote Users Rows */}
-							{remotePeers.map(peer => (
-								<div key={peer.socketId} className="flex items-center justify-between p-2 rounded-xl bg-bg-surface-hover/30 hover:bg-bg-surface-hover border border-transparent transition-all">
-									<div className="flex items-center gap-3">
-										{peer.user.avatar ? (
-											<img src={peer.user.avatar} className="h-8 w-8 rounded-lg object-cover border border-border-subtle" />
-										) : (
-											<div className="h-8 w-8 rounded-lg bg-bg-surface border border-border-default flex items-center justify-center text-xs font-bold text-text-muted">
-												{peer.user.name?.substring(0, 2).toUpperCase() || "PA"}
+							{remotePeers.map(peer => {
+								const peerName = peer.user?.name || peer.user?.email || "Participant";
+								const peerAvatar = peer.user?.avatar;
+								const peerInitials = peerName.trim().split(/\s+/).length >= 2
+									? (peerName.trim().split(/\s+/)[0][0] + peerName.trim().split(/\s+/)[1][0]).toUpperCase()
+									: peerName.substring(0, 2).toUpperCase();
+
+								return (
+									<div key={peer.socketId} className="flex items-center justify-between p-2 rounded-xl bg-bg-surface-hover/30 hover:bg-bg-surface-hover border border-transparent transition-all">
+										<div className="flex items-center gap-3">
+											{peerAvatar ? (
+												<img src={peerAvatar} className="h-8 w-8 rounded-lg object-cover border border-border-subtle" />
+											) : (
+												<div className="h-8 w-8 rounded-lg bg-brand-primary/10 border border-border-brand/20 flex items-center justify-center text-xs font-bold text-text-brand">
+													{peerInitials}
+												</div>
+											)}
+											<div className="overflow-hidden">
+												<p className="text-xs font-semibold text-text-primary truncate">{peerName}</p>
+												{isHostUser(peer.user) && (
+													<p className="text-[10px] text-text-brand font-semibold truncate">Host</p>
+												)}
 											</div>
-										)}
-										<div className="overflow-hidden">
-											<p className="text-xs font-semibold text-text-secondary truncate">{peer.user.name}</p>
-											<p className="text-[10px] text-text-muted truncate">Attendee</p>
+										</div>
+										<div className="flex gap-1.5">
+											<span className={`p-1 rounded bg-bg-app text-xs ${peer.isAudioMuted ? "text-status-danger" : "text-status-success"}`}>
+												<MicIcon size={12} />
+											</span>
+											<span className={`p-1 rounded bg-bg-app text-xs ${peer.isVideoMuted ? "text-status-danger" : "text-status-success"}`}>
+												<VideoIcon size={12} />
+											</span>
 										</div>
 									</div>
-									<div className="flex gap-1.5">
-										<span className={`p-1 rounded bg-bg-app text-xs ${peer.isAudioMuted ? "text-status-danger" : "text-status-success"}`}>
-											<MicIcon size={12} />
-										</span>
-										<span className={`p-1 rounded bg-bg-app text-xs ${peer.isVideoMuted ? "text-status-danger" : "text-status-success"}`}>
-											<VideoIcon size={12} />
-										</span>
-									</div>
-								</div>
-							))}
+								);
+							})}
 						</div>
 					</aside>
 				)}
@@ -1010,13 +1196,17 @@ export default function MeetingRoom() {
 					{/* Toggle Camera Button */}
 					<button
 						onClick={handleToggleVideo}
+						disabled={videoDevices.length === 0}
 						aria-label={isVideoMuted ? "Turn Camera On" : "Turn Camera Off"}
 						aria-pressed={isVideoMuted}
-						className={`p-2.5 sm:p-3 rounded-full border transition-all cursor-pointer shadow-md ${isVideoMuted
-								? "bg-status-danger/20 border-status-danger/40 text-status-danger hover:bg-status-danger/30"
-								: "bg-bg-surface-hover border-border-default text-text-primary hover:bg-bg-surface"
+						className={`p-2.5 sm:p-3 rounded-full border transition-all shadow-md ${
+							videoDevices.length === 0
+								? "bg-bg-surface-hover/40 border-border-subtle text-text-subtle opacity-40 cursor-not-allowed"
+								: isVideoMuted
+								? "bg-status-danger/20 border-status-danger/40 text-status-danger hover:bg-status-danger/30 cursor-pointer"
+								: "bg-bg-surface-hover border-border-default text-text-primary hover:bg-bg-surface cursor-pointer"
 							}`}
-						title={isVideoMuted ? "Turn Camera On" : "Turn Camera Off"}
+						title={videoDevices.length === 0 ? "No camera device available" : isVideoMuted ? "Turn Camera On" : "Turn Camera Off"}
 					>
 						<VideoIcon size={20} />
 					</button>
@@ -1134,8 +1324,221 @@ export default function MeetingRoom() {
 				</div>
 			</footer>
 
+			{/* Pre-Join Device Configuration Modal */}
+			{!hasJoinedRoom && !loading && !error && (
+				<div className="fixed inset-0 z-[200] bg-bg-modal/90 backdrop-blur-2xl flex items-center justify-center p-4 sm:p-6 overflow-y-auto font-sans">
+					<div className="bg-bg-surface border border-border-default rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl space-y-6 animate-in fade-in zoom-in-95 my-auto">
+						<div className="text-center space-y-1.5">
+							<div className="h-12 w-12 rounded-2xl bg-brand-primary/10 border border-border-brand/20 text-text-brand flex items-center justify-center mx-auto text-xl mb-3 shadow-md">
+								<SparklesIcon size={24} />
+							</div>
+							<h2 className="text-xl font-bold text-text-primary tracking-tight">Audio & Video Setup</h2>
+							<p className="text-xs text-text-muted">Configure your devices and preferences before joining the call</p>
+						</div>
+
+						{/* Video Preview Container */}
+						<div className="relative h-48 w-full bg-black/60 border border-border-subtle rounded-2xl overflow-hidden flex items-center justify-center shadow-inner">
+							{preJoinCameraOn && previewStream ? (
+								<CameraPreview stream={previewStream} />
+							) : (
+								<div className="flex flex-col items-center gap-2 text-text-muted">
+									<div className="h-14 w-14 rounded-full bg-bg-surface/80 border border-border-default flex items-center justify-center text-sm font-bold text-text-secondary overflow-hidden">
+										{user?.avatar ? (
+											<img src={user.avatar} className="h-full w-full object-cover" />
+										) : (
+											user?.name?.substring(0, 2).toUpperCase() || "ME"
+										)}
+									</div>
+									<p className="text-xs font-medium">Camera is turned off</p>
+								</div>
+							)}
+							
+							{/* Status Badge */}
+							<div className="absolute bottom-3 left-3 px-2.5 py-1 bg-bg-modal/80 backdrop-blur-md rounded-xl text-[11px] font-medium text-text-primary border border-border-subtle flex items-center gap-2">
+								<MicIcon size={12} className={preJoinMicOn ? "text-status-success" : "text-status-danger"} />
+								<span>{preJoinMicOn ? "Microphone Ready" : "Microphone Muted"}</span>
+							</div>
+						</div>
+
+						{/* Device Toggles */}
+						<div className="grid grid-cols-2 gap-3">
+							{/* Mic Toggle Switch (Off by default) */}
+							<button
+								type="button"
+								onClick={() => setPreJoinMicOn(!preJoinMicOn)}
+								disabled={audioDevices.length === 0}
+								className={`p-3.5 rounded-2xl border flex items-center justify-between transition-all ${
+									audioDevices.length === 0
+										? "bg-bg-app border-border-subtle text-text-subtle opacity-50 cursor-not-allowed"
+										: preJoinMicOn
+										? "bg-brand-primary/10 border-border-brand/40 text-text-brand cursor-pointer"
+										: "bg-bg-surface-hover/50 border-border-default text-text-muted hover:text-text-primary cursor-pointer"
+								}`}
+							>
+								<div className="flex items-center gap-2.5">
+									<MicIcon size={18} />
+									<span className="text-xs font-semibold">Microphone</span>
+								</div>
+								<span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+									preJoinMicOn ? "bg-brand-primary text-text-inverse" : "bg-bg-app text-text-muted"
+								}`}>
+									{preJoinMicOn ? "ON" : "OFF"}
+								</span>
+							</button>
+
+							{/* Camera Toggle Switch (Off by default, disabled if no camera) */}
+							<button
+								type="button"
+								onClick={() => {
+									if (videoDevices.length > 0) {
+										setPreJoinCameraOn(!preJoinCameraOn)
+									}
+								}}
+								disabled={videoDevices.length === 0}
+								className={`p-3.5 rounded-2xl border flex items-center justify-between transition-all ${
+									videoDevices.length === 0
+										? "bg-bg-app border-border-subtle text-text-subtle opacity-50 cursor-not-allowed"
+										: preJoinCameraOn
+										? "bg-brand-primary/10 border-border-brand/40 text-text-brand cursor-pointer"
+										: "bg-bg-surface-hover/50 border-border-default text-text-muted hover:text-text-primary cursor-pointer"
+								}`}
+								title={videoDevices.length === 0 ? "No camera device available" : undefined}
+							>
+								<div className="flex items-center gap-2.5">
+									<VideoIcon size={18} />
+									<span className="text-xs font-semibold">Camera</span>
+								</div>
+								<span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+									videoDevices.length === 0
+										? "bg-status-danger/10 text-status-danger"
+										: preJoinCameraOn ? "bg-brand-primary text-text-inverse" : "bg-bg-app text-text-muted"
+								}`}>
+									{videoDevices.length === 0 ? "NONE" : preJoinCameraOn ? "ON" : "OFF"}
+								</span>
+							</button>
+						</div>
+
+						{/* Device Dropdown Selectors */}
+						<div className="space-y-3 pt-1">
+							{/* Microphone Select */}
+							<div className="space-y-1.5">
+								<label className="text-[11px] font-bold uppercase tracking-wider text-text-muted flex items-center justify-between">
+									<span>Microphone Device</span>
+									<span className="text-[10px] font-normal lowercase text-text-subtle">
+										{audioDevices.length} detected
+									</span>
+								</label>
+								<select
+									value={selectedAudioId}
+									onChange={(e) => setSelectedAudioId(e.target.value)}
+									disabled={audioDevices.length === 0}
+									className="w-full px-3 py-2 bg-bg-input border border-border-default rounded-xl text-xs text-text-primary focus:outline-none focus:border-border-brand disabled:opacity-50"
+								>
+									{audioDevices.length === 0 ? (
+										<option value="">No microphone device detected</option>
+									) : (
+										audioDevices.map((d, i) => (
+											<option key={d.deviceId || i} value={d.deviceId}>
+												{d.label || `Microphone ${i + 1}`}
+											</option>
+										))
+									)}
+								</select>
+							</div>
+
+							{/* Camera Select */}
+							<div className="space-y-1.5">
+								<label className="text-[11px] font-bold uppercase tracking-wider text-text-muted flex items-center justify-between">
+									<span>Camera Device</span>
+									<span className="text-[10px] font-normal lowercase text-text-subtle">
+										{videoDevices.length} detected
+									</span>
+								</label>
+								<select
+									value={selectedVideoId}
+									onChange={(e) => setSelectedVideoId(e.target.value)}
+									disabled={videoDevices.length === 0}
+									className="w-full px-3 py-2 bg-bg-input border border-border-default rounded-xl text-xs text-text-primary focus:outline-none focus:border-border-brand disabled:opacity-50"
+								>
+									{videoDevices.length === 0 ? (
+										<option value="">No camera device detected</option>
+									) : (
+										videoDevices.map((d, i) => (
+											<option key={d.deviceId || i} value={d.deviceId}>
+												{d.label || `Camera ${i + 1}`}
+											</option>
+										))
+									)}
+								</select>
+							</div>
+						</div>
+
+						{/* Guard Alerts */}
+						{audioDevices.length === 0 && (
+							<div className="p-3 bg-status-danger/10 border border-status-danger/30 rounded-xl flex items-start gap-2.5 text-status-danger text-xs">
+								<WarningIcon size={18} className="shrink-0 mt-0.5" />
+								<div>
+									<p className="font-bold">Microphone Required</p>
+									<p className="text-[11px] opacity-90">At least one audio input microphone device must be connected to join this meeting.</p>
+								</div>
+							</div>
+						)}
+
+						{videoDevices.length === 0 && (
+							<div className="p-2.5 bg-bg-surface-hover/60 border border-border-subtle rounded-xl text-text-muted text-[11px] flex items-center gap-2">
+								<VideoIcon size={14} className="shrink-0 text-text-subtle" />
+								<span>No camera device detected on your system. Camera toggle is disabled.</span>
+							</div>
+						)}
+
+						{/* Actions */}
+						<div className="pt-2 flex items-center gap-3">
+							<Button
+								type="button"
+								variant="outline"
+								onClick={() => navigate('/meetings/history')}
+								className="flex-1 py-2.5 bg-bg-surface border border-border-default hover:bg-bg-surface-hover rounded-xl text-xs font-semibold text-text-primary transition-all cursor-pointer"
+							>
+								Cancel
+							</Button>
+							<Button
+								type="button"
+								onClick={handleConfirmJoin}
+								disabled={audioDevices.length === 0}
+								className="flex-1 py-2.5 bg-gradient-to-r from-brand-primary to-brand-secondary text-text-inverse font-semibold text-xs rounded-xl shadow-lg shadow-brand-primary/20 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+							>
+								Join Meeting Now
+							</Button>
+						</div>
+					</div>
+				</div>
+			)}
+
 		</div>
 	)
+}
+
+// Sub-component: Video stream preview inside pre-join modal
+function CameraPreview({ stream }: { stream: MediaStream | null }) {
+	const videoRef = useRef<HTMLVideoElement | null>(null);
+
+	useEffect(() => {
+		if (videoRef.current && stream) {
+			videoRef.current.srcObject = stream;
+		}
+	}, [stream]);
+
+	if (!stream) return null;
+
+	return (
+		<video
+			ref={videoRef}
+			autoPlay
+			playsInline
+			muted
+			className="w-full h-full object-cover rounded-2xl transform -scale-x-100"
+		/>
+	);
 }
 
 // Sub-component: Renders individual video grid cell or avatar placeholder
@@ -1164,6 +1567,12 @@ function VideoFeed({
 		}
 	}, [stream])
 
+	const initials = name && name !== "Participant" && name !== "User"
+		? (name.trim().split(/\s+/).length >= 2
+			? (name.trim().split(/\s+/)[0][0] + name.trim().split(/\s+/)[1][0]).toUpperCase()
+			: name.substring(0, 2).toUpperCase())
+		: "PA";
+
 	return (
 		<div className="relative aspect-video bg-bg-surface border border-border-default rounded-2xl overflow-hidden shadow-lg group">
 
@@ -1187,10 +1596,10 @@ function VideoFeed({
 						/>
 					) : (
 						<div className="h-20 w-20 rounded-full bg-gradient-to-br from-brand-primary/20 to-brand-secondary/20 border border-border-brand/30 flex items-center justify-center font-bold text-2xl text-text-brand shadow-2xl">
-							{name.substring(0, 2).toUpperCase()}
+							{initials}
 						</div>
 					)}
-					<span className="text-text-muted text-[11px] font-semibold tracking-wider uppercase mt-4">{name} (Camera Off)</span>
+					<span className="text-text-muted text-[11px] font-semibold tracking-wider uppercase mt-4">{name}</span>
 				</div>
 			)}
 

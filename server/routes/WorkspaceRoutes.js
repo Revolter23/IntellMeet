@@ -4,6 +4,7 @@ import { Board } from '../models/BoardModel.js';
 import { User } from '../models/UserModel.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { requireWorkspacePermission } from '../middleware/rbac.js';
+import { createNotification } from '../services/notificationService.js';
 
 const router = express.Router();
 
@@ -129,6 +130,24 @@ router.post('/:workspaceId/members',
 
             await req.workspace.save();
 
+            // Create persistent notification and emit real-time socket notification to added user (non-blocking)
+            try {
+                const io = req.app.get('io');
+                const inviterUser = await User.findById(req.user.id).select('name email');
+                const inviterName = inviterUser?.name || inviterUser?.email || 'A team member';
+                const readableRole = assignedRole.replace('WORKSPACE_', '');
+
+                await createNotification(io, {
+                    userId: targetUser._id,
+                    title: '🏢 Added to Team Workspace',
+                    message: `${inviterName} added you to the "${req.workspace.name}" workspace as ${readableRole}.`,
+                    type: 'info',
+                    link: '/workspace'
+                });
+            } catch (notifErr) {
+                console.warn("Non-blocking notification dispatch warning:", notifErr?.message || notifErr);
+            }
+
             const updatedWorkspace = await Workspace.findById(req.params.workspaceId)
                 .populate('owner', 'name email avatar')
                 .populate('members.user', 'name email avatar systemRole');
@@ -156,10 +175,47 @@ router.put('/:workspaceId/members/:memberUserId',
                 return res.status(404).json({ message: 'Member not found in workspace' });
             }
 
+            const oldRole = req.workspace.members[memberIndex].role;
+            const roleChanged = role && role !== oldRole;
+            const permissionsChanged = Boolean(customPermissions);
+
             if (role) req.workspace.members[memberIndex].role = role;
             if (customPermissions) req.workspace.members[memberIndex].customPermissions = customPermissions;
 
             await req.workspace.save();
+
+            // Create notification for role/permissions update (non-blocking)
+            try {
+                const io = req.app.get('io');
+                const updaterUser = await User.findById(req.user.id).select('name email');
+                const updaterName = updaterUser?.name || updaterUser?.email || 'A team owner';
+
+                let notifTitle = '🔒 Workspace Updated';
+                let notifMessage = `${updaterName} updated your settings in "${req.workspace.name}".`;
+
+                if (roleChanged && permissionsChanged) {
+                    const readableRole = role.replace('WORKSPACE_', '');
+                    notifTitle = '🎭 Role & Permissions Changed';
+                    notifMessage = `${updaterName} changed your role to ${readableRole} and updated your capabilities in "${req.workspace.name}".`;
+                } else if (roleChanged) {
+                    const readableRole = role.replace('WORKSPACE_', '');
+                    notifTitle = '🎭 Workspace Role Changed';
+                    notifMessage = `${updaterName} changed your role to ${readableRole} in "${req.workspace.name}".`;
+                } else if (permissionsChanged) {
+                    notifTitle = '🔑 Permissions Updated';
+                    notifMessage = `${updaterName} updated your custom capabilities in "${req.workspace.name}".`;
+                }
+
+                await createNotification(io, {
+                    userId: req.params.memberUserId,
+                    title: notifTitle,
+                    message: notifMessage,
+                    type: 'info',
+                    link: '/workspace'
+                });
+            } catch (notifErr) {
+                console.warn("Non-blocking notification dispatch warning:", notifErr?.message || notifErr);
+            }
 
             const updatedWorkspace = await Workspace.findById(req.params.workspaceId)
                 .populate('owner', 'name email avatar')
@@ -191,6 +247,23 @@ router.delete('/:workspaceId/members/:memberUserId',
             );
 
             await req.workspace.save();
+
+            // Create notification and emit socket event for removal from workspace (non-blocking)
+            try {
+                const io = req.app.get('io');
+                const removerUser = await User.findById(req.user.id).select('name email');
+                const removerName = removerUser?.name || removerUser?.email || 'A team administrator';
+
+                await createNotification(io, {
+                    userId: memberUserId,
+                    title: '🚫 Removed from Team Workspace',
+                    message: `${removerName} removed you from the "${req.workspace.name}" workspace.`,
+                    type: 'warning',
+                    link: '/workspace'
+                });
+            } catch (notifErr) {
+                console.warn("Non-blocking notification dispatch warning:", notifErr?.message || notifErr);
+            }
 
             const updatedWorkspace = await Workspace.findById(workspaceId)
                 .populate('owner', 'name email avatar')

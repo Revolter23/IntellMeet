@@ -21,16 +21,16 @@ const ALL_PERMISSIONS = [
 export default function WorkspaceView() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { 
-    workspaces, 
-    activeWorkspace, 
-    fetchWorkspaces, 
-    setActiveWorkspace, 
-    createWorkspace, 
+  const {
+    workspaces,
+    activeWorkspace,
+    fetchWorkspaces,
+    setActiveWorkspace,
+    createWorkspace,
     addMember,
     updateMemberPermissions,
     removeMember,
-    isLoading 
+    isLoading
   } = useWorkspaceStore();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -55,7 +55,7 @@ export default function WorkspaceView() {
 
   // Determine current user's role in active workspace
   const currentUserMember = activeWorkspace?.members.find(
-    m => (typeof m.user === 'object' && m.user ? m.user._id === user?.id : m.user === user?.id)
+    m => m.user?._id === user?.id
   );
   const isOwner = activeWorkspace?.owner._id === user?.id || currentUserMember?.role === 'WORKSPACE_OWNER';
   const isAdmin = isOwner || currentUserMember?.role === 'WORKSPACE_ADMIN';
@@ -191,12 +191,11 @@ export default function WorkspaceView() {
             <div>
               <div className="flex items-center gap-3">
                 <h2 className="text-xl font-extrabold text-text-primary">{activeWorkspace.name}</h2>
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
-                  isOwner ? 'bg-brand-primary/10 text-text-brand border border-border-brand/20' :
-                  isAdmin ? 'bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/20' :
-                  isGuest ? 'bg-status-warning/10 text-status-warning border border-status-warning/20' :
-                  'bg-status-success/10 text-status-success border border-status-success/20'
-                }`}>
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${isOwner ? 'bg-brand-primary/10 text-text-brand border border-border-brand/20' :
+                    isAdmin ? 'bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/20' :
+                      isGuest ? 'bg-status-warning/10 text-status-warning border border-status-warning/20' :
+                        'bg-status-success/10 text-status-success border border-status-success/20'
+                  }`}>
                   Role: {isOwner ? 'Workspace Owner' : isAdmin ? 'Workspace Admin' : isGuest ? 'Guest (Restricted)' : 'Member'}
                 </span>
               </div>
@@ -249,12 +248,11 @@ export default function WorkspaceView() {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-text-primary">{memberUser.name || 'User'}</span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                            memberIsOwner ? 'bg-brand-primary/10 text-text-brand border border-border-brand/20' :
-                            m.role === 'WORKSPACE_ADMIN' ? 'bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/20' :
-                            m.role === 'GUEST' ? 'bg-status-warning/10 text-status-warning border border-status-warning/20' :
-                            'bg-bg-surface-hover text-text-secondary'
-                          }`}>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${memberIsOwner ? 'bg-brand-primary/10 text-text-brand border border-border-brand/20' :
+                              m.role === 'WORKSPACE_ADMIN' ? 'bg-brand-secondary/10 text-brand-secondary border border-brand-secondary/20' :
+                                m.role === 'GUEST' ? 'bg-status-warning/10 text-status-warning border border-status-warning/20' :
+                                  'bg-bg-surface-hover text-text-secondary'
+                            }`}>
                             {m.role.replace('WORKSPACE_', '')}
                           </span>
                         </div>
@@ -320,7 +318,7 @@ export default function WorkspaceView() {
 
       {/* Modal: Create Workspace */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-bg-overlay backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 md:left-64 bg-bg-overlay backdrop-blur-md z-50 flex items-center justify-center p-4">
           <Card className="bg-bg-modal border border-border-default rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl gap-0">
             <h3 className="text-lg font-bold text-text-primary">Create Team Workspace</h3>
             {errorMsg && <p className="text-xs text-status-danger bg-status-danger/10 p-2.5 rounded-xl border border-status-danger/20">{errorMsg}</p>}
@@ -370,7 +368,7 @@ export default function WorkspaceView() {
 
       {/* Modal: Invite Member */}
       {showInviteModal && (
-        <div className="fixed inset-0 bg-bg-overlay backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 md:left-64 bg-bg-overlay backdrop-blur-md z-50 flex items-center justify-center p-4">
           <Card className="bg-bg-modal border border-border-default rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl gap-0">
             <h3 className="text-lg font-bold text-text-primary">Invite Team Member</h3>
             {errorMsg && <p className="text-xs text-status-danger bg-status-danger/10 p-2.5 rounded-xl border border-status-danger/20">{errorMsg}</p>}
@@ -440,7 +438,7 @@ export default function WorkspaceView() {
 
       {/* Modal: Edit Member Permissions */}
       {editingMember && (
-        <div className="fixed inset-0 bg-bg-overlay backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 md:left-64 bg-bg-overlay backdrop-blur-md z-50 flex items-center justify-center p-4">
           <Card className="bg-bg-modal border border-border-default rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl gap-0">
             <h3 className="text-lg font-bold text-text-primary">Edit Member Permissions</h3>
             <form onSubmit={handleUpdatePermissionsSubmit} className="space-y-4">

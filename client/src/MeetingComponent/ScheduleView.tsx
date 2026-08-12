@@ -171,15 +171,29 @@ export default function ScheduleView() {
 		const isInstant = m.isInstant === true || m.title?.toLowerCase() === "instant meeting"
 		if (isInstant) return false
 
-		const matchesSearch = m.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+		const matchesSearch = searchQuery === '' ||
+			m.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
 			m.meetingCode?.toLowerCase().includes(searchQuery.toLowerCase())
 
-		const isHost = m.host?._id === user?.id || m.host === user?.id
-		const isFuture = new Date(m.startTime) >= new Date(Date.now() - 3600000)
+		if (!matchesSearch) return false
 
-		if (filterTab === 'upcoming') return matchesSearch && isFuture && m.status === 'scheduled'
-		if (filterTab === 'hosted') return matchesSearch && isHost && m.status === 'scheduled'
-		return matchesSearch && m.status === 'scheduled'
+		const isHost = m.host?._id === user?.id || m.host === user?.id
+
+		// Meeting is upcoming if current time is before or within 30 minutes after scheduled startTime
+		const meetingTimeMs = new Date(m.startTime).getTime()
+		const thirtyMinsAfterStart = meetingTimeMs + (30 * 60 * 1000)
+		const isUpcomingWindow = Date.now() <= thirtyMinsAfterStart
+
+		if (filterTab === 'upcoming') {
+			return isUpcomingWindow && m.status !== 'cancelled'
+		}
+
+		if (filterTab === 'hosted') {
+			return isHost
+		}
+
+		// 'all' tab shows all non-instant scheduled meetings
+		return true
 	})
 
 	const selectedWorkspaceObj = workspaces.find(w => w._id === selectedWorkspaceId)
