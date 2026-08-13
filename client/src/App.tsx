@@ -9,6 +9,7 @@ import Loading from './Loading'
 import { useAuthStore } from './store/useAuthStore'
 import { NotificationProvider } from './context/NotificationContext'
 import ToastContainer from './components/ToastContainer'
+import MeetingRoom from './MeetingComponent/MeetingRoom'
 
 // Lazy load components for route code splitting
 const Profile = lazy(() => import('./DashboardComponents/Profile'))
@@ -18,7 +19,6 @@ const ProjectBoardView = lazy(() => import('./DashboardComponents/ProjectBoardVi
 const ScheduleView = lazy(() => import('./MeetingComponent/ScheduleView'))
 const MyMeetings = lazy(() => import('./MeetingComponent/MyMeetings'))
 const PostMeetingDashboard = lazy(() => import('./MeetingComponent/PostMeetingDashboard'))
-const MeetingRoom = lazy(() => import('./MeetingComponent/MeetingRoom'))
 
 function Home() {
   const { accessToken, user } = useAuthStore()
@@ -210,9 +210,7 @@ function App() {
           path="/meetings/:meetingCode"
           element={
             <ProtectedRoute>
-              <Suspense fallback={<Loading>Joining Meeting Room...</Loading>}>
-                <MeetingRoom />
-              </Suspense>
+              <MeetingRoom />
             </ProtectedRoute>
           }
         />

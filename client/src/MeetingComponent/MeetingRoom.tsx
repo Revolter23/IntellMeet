@@ -337,6 +337,9 @@ export default function MeetingRoom() {
 			mediaRecorder.start(1000);
 			mediaRecorderRef.current = mediaRecorder;
 			setIsRecording(true);
+
+			triggerRoomAlert("🔴 You started recording this meeting");
+			socketRef.current?.emit("recording-toggled", { isRecording: true });
 		} catch (err) {
 			console.error("Error starting recording:", err);
 			alert("Failed to start local meeting recording.");
@@ -348,6 +351,8 @@ export default function MeetingRoom() {
 			mediaRecorderRef.current.stop();
 		}
 		setIsRecording(false);
+		triggerRoomAlert("🔴 You stopped recording");
+		socketRef.current?.emit("recording-toggled", { isRecording: false });
 	};
 
 	const uploadRecordingToCloud = async (blob: Blob) => {
@@ -418,14 +423,17 @@ export default function MeetingRoom() {
 					? { deviceId: { exact: selectedVideoId } }
 					: videoDevices.length > 0;
 
-				const audioConstraints: boolean | MediaTrackConstraints = selectedAudioId
-					? { deviceId: { exact: selectedAudioId } }
-					: true;
+				const audioConstraints: boolean | MediaTrackConstraints = {
+					echoCancellation: true,
+					noiseSuppression: true,
+					autoGainControl: true,
+					...(selectedAudioId ? { deviceId: { exact: selectedAudioId } } : {})
+				};
 
 				let stream: MediaStream;
 				try {
 					stream = await navigator.mediaDevices.getUserMedia({
-						video: videoDevices.length > 0 && preJoinCameraOn ? videoConstraints : false,
+						video: videoDevices.length > 0 ? videoConstraints : false,
 						audio: audioConstraints
 					});
 				} catch (err) {
@@ -440,6 +448,7 @@ export default function MeetingRoom() {
 					stream.getAudioTracks().forEach(track => { track.enabled = false; });
 					setIsAudioMuted(true);
 				} else {
+					stream.getAudioTracks().forEach(track => { track.enabled = true; });
 					setIsAudioMuted(false);
 				}
 
@@ -447,6 +456,7 @@ export default function MeetingRoom() {
 					stream.getVideoTracks().forEach(track => { track.enabled = false; });
 					setIsVideoMuted(true);
 				} else {
+					stream.getVideoTracks().forEach(track => { track.enabled = true; });
 					setIsVideoMuted(false);
 				}
 
@@ -470,13 +480,20 @@ export default function MeetingRoom() {
 						_id: (user as any)._id || user.id,
 						name: user.name,
 						email: user.email,
-						avatar: user.avatar
+						avatar: user.avatar || (user as any)?.avatar || "",
+						isAudioMuted,
+						isVideoMuted
 					}
 				})
 
-				const handleExistingUsers = async (usersInRoom: { socketId: string; user: User }[]) => {
+				socketRef.current.emit("toggle-media", {
+					isAudioMuted,
+					isVideoMuted
+				})
+
+				const handleExistingUsers = async (usersInRoom: { socketId: string; user: User; isAudioMuted?: boolean; isVideoMuted?: boolean }[]) => {
 					console.log("Existing users in room:", usersInRoom)
-					const uniqueUsers: { socketId: string; user: User }[] = [];
+					const uniqueUsers: { socketId: string; user: User; isAudioMuted?: boolean; isVideoMuted?: boolean }[] = [];
 					const seenIds = new Set<string>();
 
 					for (const u of usersInRoom) {
@@ -490,8 +507,8 @@ export default function MeetingRoom() {
 					setRemotePeers(uniqueUsers.map(u => ({
 						socketId: u.socketId,
 						user: u.user,
-						isAudioMuted: false,
-						isVideoMuted: false
+						isAudioMuted: u.isAudioMuted ?? (u.user as any)?.isAudioMuted ?? false,
+						isVideoMuted: u.isVideoMuted ?? (u.user as any)?.isVideoMuted ?? true
 					})))
 
 					for (const remote of uniqueUsers) {
@@ -517,9 +534,12 @@ export default function MeetingRoom() {
 				socketRef.current.on("all-users", handleExistingUsers)
 				socketRef.current.on("existing-users", handleExistingUsers)
 
-				socketRef.current.on("user-joined", ({ socketId, user: joinedUser }: { socketId: string; user: User }) => {
+				socketRef.current.on("user-joined", ({ socketId, user: joinedUser }: { socketId: string; user: any }) => {
 					console.log("New user joined room:", joinedUser)
-					const joinedUserId = joinedUser?._id || (joinedUser as any)?.id;
+					const userName = joinedUser ? (joinedUser.name || joinedUser.email) : 'A participant';
+					triggerRoomAlert(`👤 ${userName} joined the meeting`);
+
+					const joinedUserId = joinedUser?._id || joinedUser?.id;
 					setRemotePeers(prev => {
 						const filtered = prev.filter(p => {
 							if (p.socketId === socketId) return false;
@@ -529,14 +549,35 @@ export default function MeetingRoom() {
 						return [...filtered, {
 							socketId,
 							user: joinedUser,
-							isAudioMuted: false,
-							isVideoMuted: false
+							isAudioMuted: joinedUser?.isAudioMuted ?? false,
+							isVideoMuted: joinedUser?.isVideoMuted ?? true
 						}]
 					})
 				})
 
 				socketRef.current.on("offer", async ({ from, offer, user: offerUser }: { from: string; offer: RTCSessionDescriptionInit; user: User }) => {
 					console.log("Received WebRTC offer from:", offerUser?.email)
+					if (offerUser) {
+						setRemotePeers(prev => {
+							const existing = prev.find(p => p.socketId === from);
+							if (existing) {
+								return prev.map(p => p.socketId === from ? {
+									...p,
+									user: {
+										...p.user,
+										...offerUser,
+										avatar: offerUser.avatar || p.user?.avatar
+									}
+								} : p);
+							}
+							return [...prev, {
+								socketId: from,
+								user: offerUser,
+								isAudioMuted: (offerUser as any)?.isAudioMuted ?? false,
+								isVideoMuted: (offerUser as any)?.isVideoMuted ?? true
+							}];
+						});
+					}
 					let pc = peersRef.current[from]
 					if (!pc) {
 						pc = createPeerConnection(from, offerUser)
@@ -632,13 +673,31 @@ export default function MeetingRoom() {
 					}))
 				})
 
-				socketRef.current.on("user-screen-toggled", ({ socketId, isScreenSharing: screenSharing }: { socketId: string; isScreenSharing: boolean }) => {
+				socketRef.current.on("user-screen-toggled", ({ socketId, user: screenUser, isScreenSharing: screenSharing }: { socketId: string; user?: any; isScreenSharing: boolean }) => {
 					setRemotePeers(prev => prev.map(p => {
 						if (p.socketId === socketId) {
 							return { ...p, isScreenSharing: screenSharing }
 						}
 						return p;
 					}))
+
+					const targetPeer = remotePeers.find(p => p.socketId === socketId);
+					const userName = screenUser ? (screenUser.name || screenUser.email) : (targetPeer?.user ? (targetPeer.user.name || targetPeer.user.email) : 'A participant');
+					if (screenSharing) {
+						triggerRoomAlert(`🖥️ ${userName} started sharing their screen`);
+					} else {
+						triggerRoomAlert(`🖥️ ${userName} stopped screen sharing`);
+					}
+				})
+
+				socketRef.current.on("user-recording-toggled", ({ socketId, user: recUser, isRecording: recording }: { socketId: string; user?: any; isRecording: boolean }) => {
+					const targetPeer = remotePeers.find(p => p.socketId === socketId);
+					const userName = recUser ? (recUser.name || recUser.email) : (targetPeer?.user ? (targetPeer.user.name || targetPeer.user.email) : 'A participant');
+					if (recording) {
+						triggerRoomAlert(`🔴 ${userName} started recording this meeting`);
+					} else {
+						triggerRoomAlert(`🔴 ${userName} stopped recording`);
+					}
 				})
 
 				socketRef.current.on("user-typing", ({ socketId, userName, isTyping }: { socketId: string; userName?: string; isTyping: boolean }) => {
@@ -727,40 +786,104 @@ export default function MeetingRoom() {
 		return pc;
 	}
 
-	const handleToggleAudio = () => {
-		const stream = localStreamRef.current;
-		if (stream) {
-			const tracks = stream.getAudioTracks()
-			if (tracks.length > 0) {
-				const nextState = !isAudioMuted;
-				tracks.forEach(track => {
-					track.enabled = !nextState;
-				})
-				setIsAudioMuted(nextState)
-				socketRef.current?.emit("toggle-media", {
-					isAudioMuted: nextState,
-					isVideoMuted
-				})
+	const handleToggleAudio = async () => {
+		let stream = localStreamRef.current;
+		if (!stream) return;
+
+		let tracks = stream.getAudioTracks();
+		if (tracks.length === 0) {
+			try {
+				const audioConstraints: boolean | MediaTrackConstraints = selectedAudioId
+					? { deviceId: { exact: selectedAudioId } }
+					: true;
+				const newAudioStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+				const newTrack = newAudioStream.getAudioTracks()[0];
+				if (newTrack) {
+					stream.addTrack(newTrack);
+					tracks = [newTrack];
+
+					Object.values(peersRef.current).forEach(pc => {
+						pc.addTrack(newTrack, stream!);
+					});
+				}
+			} catch (err) {
+				console.error("Error obtaining mic audio track:", err);
+				return;
 			}
 		}
+
+		const nextState = !isAudioMuted;
+		tracks.forEach(track => {
+			track.enabled = !nextState;
+		});
+
+		setIsAudioMuted(nextState);
+		setLocalStream(new MediaStream(stream.getTracks()));
+
+		socketRef.current?.emit("toggle-media", {
+			isAudioMuted: nextState,
+			isVideoMuted
+		});
 	}
 
-	const handleToggleVideo = () => {
-		const stream = localStreamRef.current;
-		if (stream) {
-			const tracks = stream.getVideoTracks()
-			if (tracks.length > 0) {
-				const nextState = !isVideoMuted;
-				tracks.forEach(track => {
-					track.enabled = !nextState;
-				})
-				setIsVideoMuted(nextState)
-				socketRef.current?.emit("toggle-media", {
-					isAudioMuted,
-					isVideoMuted: nextState
-				})
+	const handleToggleVideo = async () => {
+		let stream = localStreamRef.current;
+		if (!stream) {
+			stream = new MediaStream();
+			localStreamRef.current = stream;
+			setLocalStream(stream);
+		}
+
+		let tracks = stream.getVideoTracks();
+
+		// If no video track exists on localStream, dynamically request a camera video track
+		if (tracks.length === 0) {
+			try {
+				const videoConstraints: boolean | MediaTrackConstraints = (videoDevices.length > 0 && selectedVideoId)
+					? { deviceId: { exact: selectedVideoId } }
+					: videoDevices.length > 0;
+				const newVideoStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
+				const newTrack = newVideoStream.getVideoTracks()[0];
+				if (newTrack) {
+					stream.addTrack(newTrack);
+					tracks = [newTrack];
+
+					// Add/Replace track across all existing peer connections
+					Object.entries(peersRef.current).forEach(async ([socketId, pc]) => {
+						const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+						if (sender) {
+							await sender.replaceTrack(newTrack);
+						} else {
+							pc.addTrack(newTrack, stream!);
+							try {
+								const offer = await pc.createOffer();
+								await pc.setLocalDescription(offer);
+								socketRef.current?.emit("offer", { to: socketId, offer });
+							} catch (e) {
+								console.error("Error renegotiating peer video track:", e);
+							}
+						}
+					});
+				}
+			} catch (err) {
+				console.error("Error obtaining camera video track:", err);
+				alert("Could not access camera device.");
+				return;
 			}
 		}
+
+		const nextState = !isVideoMuted;
+		tracks.forEach(track => {
+			track.enabled = !nextState;
+		});
+
+		setIsVideoMuted(nextState);
+		setLocalStream(new MediaStream(stream.getTracks()));
+
+		socketRef.current?.emit("toggle-media", {
+			isAudioMuted,
+			isVideoMuted: nextState
+		});
 	}
 
 	const handleToggleScreen = async () => {
@@ -786,6 +909,7 @@ export default function MeetingRoom() {
 				}
 
 				setIsScreenSharing(true)
+				triggerRoomAlert("🖥️ You started sharing your screen")
 				socketRef.current?.emit("screen-share-toggled", { isScreenSharing: true })
 			} catch (err) {
 				console.error("Error launching screen share:", err)
@@ -812,6 +936,7 @@ export default function MeetingRoom() {
 		}
 
 		setIsScreenSharing(false)
+		triggerRoomAlert("🖥️ You stopped screen sharing")
 		socketRef.current?.emit("screen-share-toggled", { isScreenSharing: false })
 	}
 
@@ -947,8 +1072,8 @@ export default function MeetingRoom() {
 							if (!showParticipants) setShowChat(false)
 						}}
 						className={`px-3 py-1 text-xs font-medium rounded-xl border transition-all cursor-pointer ${showParticipants
-								? "bg-brand-primary/10 border-border-brand/30 text-text-brand"
-								: "bg-bg-surface border-border-default text-text-muted hover:text-text-primary"
+							? "bg-brand-primary/10 border-border-brand/30 text-text-brand"
+							: "bg-bg-surface border-border-default text-text-muted hover:text-text-primary"
 							}`}
 					>
 						People ({totalParticipants})
@@ -961,8 +1086,8 @@ export default function MeetingRoom() {
 							if (!showChat) setShowParticipants(false)
 						}}
 						className={`relative px-3 py-1 text-xs font-medium rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${showChat
-								? "bg-brand-primary/10 border-border-brand/30 text-text-brand"
-								: "bg-bg-surface border-border-default text-text-muted hover:text-text-primary"
+							? "bg-brand-primary/10 border-border-brand/30 text-text-brand"
+							: "bg-bg-surface border-border-default text-text-muted hover:text-text-primary"
 							}`}
 					>
 						<ChatIcon size={14} />
@@ -1124,8 +1249,8 @@ export default function MeetingRoom() {
 											</div>
 											<div
 												className={`px-3 py-2 rounded-2xl text-xs max-w-[85%] break-words shadow-sm ${isMe
-														? "bg-brand-primary text-text-inverse rounded-tr-none"
-														: "bg-bg-surface border border-border-default text-text-primary rounded-tl-none"
+													? "bg-brand-primary text-text-inverse rounded-tr-none"
+													: "bg-bg-surface border border-border-default text-text-primary rounded-tl-none"
 													}`}
 											>
 												{msg.text}
@@ -1185,8 +1310,8 @@ export default function MeetingRoom() {
 						aria-label={isAudioMuted ? "Unmute Microphone" : "Mute Microphone"}
 						aria-pressed={isAudioMuted}
 						className={`p-2.5 sm:p-3 rounded-full border transition-all cursor-pointer shadow-md ${isAudioMuted
-								? "bg-status-danger/20 border-status-danger/40 text-status-danger hover:bg-status-danger/30"
-								: "bg-bg-surface-hover border-border-default text-text-primary hover:bg-bg-surface"
+							? "bg-status-danger/20 border-status-danger/40 text-status-danger hover:bg-status-danger/30"
+							: "bg-bg-surface-hover border-border-default text-text-primary hover:bg-bg-surface"
 							}`}
 						title={isAudioMuted ? "Unmute Mic" : "Mute Mic"}
 					>
@@ -1199,10 +1324,9 @@ export default function MeetingRoom() {
 						disabled={videoDevices.length === 0}
 						aria-label={isVideoMuted ? "Turn Camera On" : "Turn Camera Off"}
 						aria-pressed={isVideoMuted}
-						className={`p-2.5 sm:p-3 rounded-full border transition-all shadow-md ${
-							videoDevices.length === 0
-								? "bg-bg-surface-hover/40 border-border-subtle text-text-subtle opacity-40 cursor-not-allowed"
-								: isVideoMuted
+						className={`p-2.5 sm:p-3 rounded-full border transition-all shadow-md ${videoDevices.length === 0
+							? "bg-bg-surface-hover/40 border-border-subtle text-text-subtle opacity-40 cursor-not-allowed"
+							: isVideoMuted
 								? "bg-status-danger/20 border-status-danger/40 text-status-danger hover:bg-status-danger/30 cursor-pointer"
 								: "bg-bg-surface-hover border-border-default text-text-primary hover:bg-bg-surface cursor-pointer"
 							}`}
@@ -1217,8 +1341,8 @@ export default function MeetingRoom() {
 						aria-label={isScreenSharing ? "Stop Sharing Screen" : "Share Screen"}
 						aria-pressed={isScreenSharing}
 						className={`p-2.5 sm:p-3 rounded-full border transition-all cursor-pointer shadow-md ${isScreenSharing
-								? "bg-brand-primary/20 border-border-brand/40 text-text-brand hover:bg-brand-primary/30"
-								: "bg-bg-surface-hover border-border-default text-text-primary hover:bg-bg-surface"
+							? "bg-brand-primary/20 border-border-brand/40 text-text-brand hover:bg-brand-primary/30"
+							: "bg-bg-surface-hover border-border-default text-text-primary hover:bg-bg-surface"
 							}`}
 						title={isScreenSharing ? "Stop Screen Share" : "Share Screen"}
 					>
@@ -1231,8 +1355,8 @@ export default function MeetingRoom() {
 						aria-label={isRecording ? `Stop Recording (${formatRecordingTime(recordingTime)})` : "Record Meeting"}
 						aria-pressed={isRecording}
 						className={`p-2.5 sm:p-3 rounded-full border transition-all cursor-pointer shadow-md relative ${isRecording
-								? "bg-status-danger/20 border-status-danger/40 text-status-danger hover:bg-status-danger/30 animate-pulse"
-								: "bg-bg-surface-hover border-border-default text-text-primary hover:bg-bg-surface"
+							? "bg-status-danger/20 border-status-danger/40 text-status-danger hover:bg-status-danger/30 animate-pulse"
+							: "bg-bg-surface-hover border-border-default text-text-primary hover:bg-bg-surface"
 							}`}
 						title={isRecording ? `Stop Recording (${formatRecordingTime(recordingTime)})` : "Record Meeting"}
 					>
@@ -1248,8 +1372,8 @@ export default function MeetingRoom() {
 						aria-label={`In-Meeting Chat ${unreadCount > 0 ? `(${unreadCount} unread)` : ''}`}
 						aria-expanded={showChat}
 						className={`relative p-2.5 sm:p-3 rounded-full border transition-all cursor-pointer shadow-md ${showChat
-								? "bg-brand-primary/20 border-border-brand/40 text-text-brand hover:bg-brand-primary/30"
-								: "bg-bg-surface-hover border-border-default text-text-primary hover:bg-bg-surface"
+							? "bg-brand-primary/20 border-border-brand/40 text-text-brand hover:bg-brand-primary/30"
+							: "bg-bg-surface-hover border-border-default text-text-primary hover:bg-bg-surface"
 							}`}
 						title="In-Meeting Chat"
 					>
@@ -1266,8 +1390,8 @@ export default function MeetingRoom() {
 						onClick={copyInviteLink}
 						aria-label="Copy meeting link"
 						className={`sm:hidden p-2.5 sm:p-3 rounded-full border transition-all cursor-pointer shadow-md ${copied
-								? "bg-status-success/20 border-status-success/40 text-status-success"
-								: "bg-bg-surface-hover border-border-default text-text-primary"
+							? "bg-status-success/20 border-status-success/40 text-status-success"
+							: "bg-bg-surface-hover border-border-default text-text-primary"
 							}`}
 						title="Copy Meeting Link"
 					>
@@ -1352,7 +1476,7 @@ export default function MeetingRoom() {
 									<p className="text-xs font-medium">Camera is turned off</p>
 								</div>
 							)}
-							
+
 							{/* Status Badge */}
 							<div className="absolute bottom-3 left-3 px-2.5 py-1 bg-bg-modal/80 backdrop-blur-md rounded-xl text-[11px] font-medium text-text-primary border border-border-subtle flex items-center gap-2">
 								<MicIcon size={12} className={preJoinMicOn ? "text-status-success" : "text-status-danger"} />
@@ -1367,21 +1491,19 @@ export default function MeetingRoom() {
 								type="button"
 								onClick={() => setPreJoinMicOn(!preJoinMicOn)}
 								disabled={audioDevices.length === 0}
-								className={`p-3.5 rounded-2xl border flex items-center justify-between transition-all ${
-									audioDevices.length === 0
-										? "bg-bg-app border-border-subtle text-text-subtle opacity-50 cursor-not-allowed"
-										: preJoinMicOn
+								className={`p-3.5 rounded-2xl border flex items-center justify-between transition-all ${audioDevices.length === 0
+									? "bg-bg-app border-border-subtle text-text-subtle opacity-50 cursor-not-allowed"
+									: preJoinMicOn
 										? "bg-brand-primary/10 border-border-brand/40 text-text-brand cursor-pointer"
 										: "bg-bg-surface-hover/50 border-border-default text-text-muted hover:text-text-primary cursor-pointer"
-								}`}
+									}`}
 							>
 								<div className="flex items-center gap-2.5">
 									<MicIcon size={18} />
 									<span className="text-xs font-semibold">Microphone</span>
 								</div>
-								<span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-									preJoinMicOn ? "bg-brand-primary text-text-inverse" : "bg-bg-app text-text-muted"
-								}`}>
+								<span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${preJoinMicOn ? "bg-brand-primary text-text-inverse" : "bg-bg-app text-text-muted"
+									}`}>
 									{preJoinMicOn ? "ON" : "OFF"}
 								</span>
 							</button>
@@ -1395,24 +1517,22 @@ export default function MeetingRoom() {
 									}
 								}}
 								disabled={videoDevices.length === 0}
-								className={`p-3.5 rounded-2xl border flex items-center justify-between transition-all ${
-									videoDevices.length === 0
-										? "bg-bg-app border-border-subtle text-text-subtle opacity-50 cursor-not-allowed"
-										: preJoinCameraOn
+								className={`p-3.5 rounded-2xl border flex items-center justify-between transition-all ${videoDevices.length === 0
+									? "bg-bg-app border-border-subtle text-text-subtle opacity-50 cursor-not-allowed"
+									: preJoinCameraOn
 										? "bg-brand-primary/10 border-border-brand/40 text-text-brand cursor-pointer"
 										: "bg-bg-surface-hover/50 border-border-default text-text-muted hover:text-text-primary cursor-pointer"
-								}`}
+									}`}
 								title={videoDevices.length === 0 ? "No camera device available" : undefined}
 							>
 								<div className="flex items-center gap-2.5">
 									<VideoIcon size={18} />
 									<span className="text-xs font-semibold">Camera</span>
 								</div>
-								<span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-									videoDevices.length === 0
-										? "bg-status-danger/10 text-status-danger"
-										: preJoinCameraOn ? "bg-brand-primary text-text-inverse" : "bg-bg-app text-text-muted"
-								}`}>
+								<span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${videoDevices.length === 0
+									? "bg-status-danger/10 text-status-danger"
+									: preJoinCameraOn ? "bg-brand-primary text-text-inverse" : "bg-bg-app text-text-muted"
+									}`}>
 									{videoDevices.length === 0 ? "NONE" : preJoinCameraOn ? "ON" : "OFF"}
 								</span>
 							</button>
@@ -1541,6 +1661,19 @@ function CameraPreview({ stream }: { stream: MediaStream | null }) {
 	);
 }
 
+// Sub-component: Dedicated, memoized audio player for remote streams to prevent audio buffer flushing on re-renders
+function RemoteAudio({ stream }: { stream: MediaStream }) {
+	const audioRef = useRef<HTMLAudioElement | null>(null);
+
+	useEffect(() => {
+		if (audioRef.current && audioRef.current.srcObject !== stream) {
+			audioRef.current.srcObject = stream;
+		}
+	}, [stream]);
+
+	return <audio ref={audioRef} autoPlay playsInline />;
+}
+
 // Sub-component: Renders individual video grid cell or avatar placeholder
 function VideoFeed({
 	stream,
@@ -1561,11 +1694,13 @@ function VideoFeed({
 }) {
 	const videoRef = useRef<HTMLVideoElement | null>(null)
 
+	const hasActiveVideoTrack = stream && stream.getVideoTracks().length > 0 && stream.getVideoTracks().some(t => t.enabled && t.readyState === 'live');
+
 	useEffect(() => {
-		if (videoRef.current && stream) {
-			videoRef.current.srcObject = stream
+		if (videoRef.current && videoRef.current.srcObject !== stream) {
+			videoRef.current.srcObject = stream || null;
 		}
-	}, [stream])
+	}, [stream, hasActiveVideoTrack, isVideoMuted])
 
 	const initials = name && name !== "Participant" && name !== "User"
 		? (name.trim().split(/\s+/).length >= 2
@@ -1576,13 +1711,21 @@ function VideoFeed({
 	return (
 		<div className="relative aspect-video bg-bg-surface border border-border-default rounded-2xl overflow-hidden shadow-lg group">
 
+			{/* Dedicated Audio element for remote streams to guarantee uninterrupted audio playback */}
+			{!isLocal && stream && <RemoteAudio stream={stream} />}
+
 			{/* Show Video element if stream has active video track and is unmuted */}
-			{stream && !isVideoMuted ? (
+			{hasActiveVideoTrack && !isVideoMuted ? (
 				<video
-					ref={videoRef}
+					ref={(node) => {
+						videoRef.current = node;
+						if (node && node.srcObject !== stream) {
+							node.srcObject = stream || null;
+						}
+					}}
 					autoPlay
 					playsInline
-					muted={isLocal} // Avoid local feedback echo
+					muted={true} // Audio is handled exclusively by the dedicated <RemoteAudio> element above
 					className="w-full h-full object-cover"
 				/>
 			) : (
@@ -1592,7 +1735,7 @@ function VideoFeed({
 						<img
 							src={avatar}
 							alt={name}
-							className="h-20 w-20 rounded-full border border-border-default object-cover shadow-2xl animate-pulse"
+							className="h-20 w-20 rounded-full border border-border-default object-cover shadow-2xl"
 						/>
 					) : (
 						<div className="h-20 w-20 rounded-full bg-gradient-to-br from-brand-primary/20 to-brand-secondary/20 border border-border-brand/30 flex items-center justify-center font-bold text-2xl text-text-brand shadow-2xl">

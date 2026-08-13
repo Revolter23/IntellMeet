@@ -181,16 +181,6 @@ io.on('connection', (socket) => {
             user: user
         });
 
-        // Broadcast real-time notification to room participants
-        socket.to(meetingCode).emit('receive-notification', {
-            id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
-            type: 'user-joined',
-            title: 'Participant Joined',
-            message: `${user.name || user.email} joined the meeting`,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            user: user
-        });
-
 
         // Collect other active users in this room
         const clients = io.sockets.adapter.rooms.get(meetingCode);
@@ -382,17 +372,8 @@ io.on('connection', (socket) => {
         if (meetingCode) {
             socket.to(meetingCode).emit('user-screen-toggled', {
                 socketId: socket.id,
+                user: senderUser,
                 isScreenSharing
-            });
-
-            // Broadcast real-time toast alert
-            const userName = senderUser ? (senderUser.name || senderUser.email) : 'A participant';
-            socket.to(meetingCode).emit('receive-notification', {
-                id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
-                type: 'info',
-                title: isScreenSharing ? 'Screen Sharing Started' : 'Screen Sharing Stopped',
-                message: isScreenSharing ? `${userName} started sharing their screen` : `${userName} stopped screen sharing`,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             });
         }
     });
@@ -417,13 +398,10 @@ io.on('connection', (socket) => {
         }
 
         if (meetingCode) {
-            const userName = senderUser ? (senderUser.name || senderUser.email) : 'A participant';
-            socket.to(meetingCode).emit('receive-notification', {
-                id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
-                type: isRecording ? 'warning' : 'info',
-                title: isRecording ? 'Meeting Recording Started' : 'Meeting Recording Stopped',
-                message: isRecording ? `${userName} started recording this call` : `${userName} stopped recording`,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            socket.to(meetingCode).emit('user-recording-toggled', {
+                socketId: socket.id,
+                user: senderUser,
+                isRecording
             });
         }
     });
