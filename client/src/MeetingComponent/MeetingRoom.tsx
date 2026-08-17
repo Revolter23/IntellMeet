@@ -941,10 +941,16 @@ export default function MeetingRoom() {
 	}
 
 	const copyInviteLink = () => {
-		const link = window.location.href;
-		navigator.clipboard.writeText(link)
-		setCopied(true)
-		setTimeout(() => setCopied(false), 2000)
+		let code = meetingCode;
+		if (!code) {
+			const match = window.location.pathname.match(/\/meetings\/([^\/]+)/);
+			code = match ? match[1] : '';
+		}
+		if (code) {
+			navigator.clipboard.writeText(code)
+			setCopied(true)
+			setTimeout(() => setCopied(false), 2000)
+		}
 	}
 
 	const handleLeaveMeeting = () => {
@@ -1059,7 +1065,7 @@ export default function MeetingRoom() {
 						<button
 							onClick={copyInviteLink}
 							className="text-text-muted hover:text-text-primary transition-colors cursor-pointer"
-							title="Copy invite link"
+							title="Copy meeting code"
 						>
 							{copied ? <CheckIcon className="text-status-success" size={14} /> : <CopyIcon size={14} />}
 						</button>

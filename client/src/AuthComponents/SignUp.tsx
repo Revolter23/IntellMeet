@@ -47,7 +47,6 @@ export default function SignUp() {
       const res = await axios.post(`${API_BASE_URL}/auth/signup`, payload, {
         withCredentials: true,
       })
-      console.log("SignUp submitted successfully:", res.data)
       const { accessToken, user } = res.data
       setAuth(accessToken, user)
       setSuccessMessage("Account created successfully! Redirecting...")

@@ -40,7 +40,6 @@ export default function Login() {
       const res = await axios.post(`${API_BASE_URL}/auth/login`, data, {
         withCredentials: true,
       })
-      console.log("Login submitted successfully:", res.data)
       const { accessToken, user } = res.data
       setAuth(accessToken, user)
       setSuccessMessage("Signed in successfully!")

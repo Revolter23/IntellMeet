@@ -30,6 +30,9 @@ export const authenticateToken = async (req, res, next) => {
                 const cachedUser = await redisClient.get(cacheKey);
                 if (cachedUser) {
                     req.user = JSON.parse(cachedUser);
+                    if (!req.user.id && req.user._id) {
+                        req.user.id = req.user._id.toString();
+                    }
                     return next();
                 }
             } catch (err) {

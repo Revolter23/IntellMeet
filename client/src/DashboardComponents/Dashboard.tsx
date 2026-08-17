@@ -1,6 +1,6 @@
 "use no memo";
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router"
 import { useAuthStore } from "../store/useAuthStore"
 import { api } from "../lib/api"
@@ -12,13 +12,10 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 
 import {
 	VideoIcon,
-	MicIcon,
 	CalendarIcon,
 	CopyIcon,
 	CheckIcon,
-	SparklesIcon,
-	CameraIcon,
-	WarningIcon
+	SparklesIcon
 } from "../lib/icons"
 
 export default function Dashboard() {
@@ -27,138 +24,15 @@ export default function Dashboard() {
 	const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
 	const { user } = useAuthStore()
 
-	const [isMuted, setIsMuted] = useState(false)
-	const [isCamOff, setIsCamOff] = useState(false)
 	const [showMeetingModal, setShowMeetingModal] = useState(false)
 	const [meetingCode, setMeetingCode] = useState("")
 	const [joinCodeInput, setJoinCodeInput] = useState("")
 	const [loadingMeeting, setLoadingMeeting] = useState(false)
 
-	// Media Device Enumeration & Live Preview States
-	const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([])
-	const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([])
-	const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState<string>("")
-	const [selectedAudioDeviceId, setSelectedAudioDeviceId] = useState<string>("")
-	const [previewStream, setPreviewStream] = useState<MediaStream | null>(null)
-	const [previewError, setPreviewError] = useState<string | null>(null)
-	const previewVideoRef = useRef<HTMLVideoElement | null>(null)
-
-	const meetingLink = `${window.location.origin}/meetings/${meetingCode}`
-
 	useEffect(() => {
 		const timer = setInterval(() => setTime(new Date()), 1000)
 		return () => clearInterval(timer)
 	}, [])
-
-	// Enumerate Media Input Devices (Microphones & Cameras)
-	useEffect(() => {
-		let active = true;
-
-		const initDevices = async () => {
-			try {
-				let tempStream: MediaStream | null = null;
-				try {
-					tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-				} catch (err) {
-					console.warn("Media permissions prompt result:", err);
-				}
-
-				const devices = await navigator.mediaDevices.enumerateDevices();
-				if (!active) {
-					if (tempStream) tempStream.getTracks().forEach(t => t.stop());
-					return;
-				}
-
-				const vDevs = devices.filter(d => d.kind === 'videoinput');
-				const aDevs = devices.filter(d => d.kind === 'audioinput');
-
-				setVideoDevices(vDevs);
-				setAudioDevices(aDevs);
-
-				if (vDevs.length > 0 && !selectedVideoDeviceId) {
-					setSelectedVideoDeviceId(vDevs[0].deviceId);
-				}
-				if (aDevs.length > 0 && !selectedAudioDeviceId) {
-					setSelectedAudioDeviceId(aDevs[0].deviceId);
-				}
-
-				if (tempStream) {
-					tempStream.getTracks().forEach(t => t.stop());
-				}
-			} catch (err: any) {
-				console.error("Error enumerating devices:", err);
-			}
-		};
-
-		initDevices();
-
-		const handleDeviceChange = () => {
-			initDevices();
-		};
-
-		if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
-			navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
-		}
-
-		return () => {
-			active = false;
-			if (navigator.mediaDevices && navigator.mediaDevices.removeEventListener) {
-				navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
-			}
-		};
-	}, []);
-
-	// Live Camera Preview Effect
-	useEffect(() => {
-		let active = true;
-		let currentStream: MediaStream | null = null;
-
-		const updatePreview = async () => {
-			setPreviewError(null);
-
-			if (isCamOff) {
-				setPreviewStream(null);
-				return;
-			}
-
-			try {
-				const constraints: MediaStreamConstraints = {
-					video: selectedVideoDeviceId ? { deviceId: { exact: selectedVideoDeviceId } } : true,
-					audio: false // muted for dashboard preview
-				};
-
-				currentStream = await navigator.mediaDevices.getUserMedia(constraints);
-				if (!active) {
-					currentStream.getTracks().forEach(t => t.stop());
-					return;
-				}
-
-				setPreviewStream(currentStream);
-			} catch (err: any) {
-				console.error("Camera preview error:", err);
-				if (active) {
-					setPreviewError("Camera device unavailable or permission denied");
-					setPreviewStream(null);
-				}
-			}
-		};
-
-		updatePreview();
-
-		return () => {
-			active = false;
-			if (currentStream) {
-				currentStream.getTracks().forEach(t => t.stop());
-			}
-		};
-	}, [isCamOff, selectedVideoDeviceId]);
-
-	// Attach preview stream to video element
-	useEffect(() => {
-		if (previewVideoRef.current && previewStream) {
-			previewVideoRef.current.srcObject = previewStream;
-		}
-	}, [previewStream]);
 
 	const getFirstName = (name?: string) => {
 		if (!name) return "User";
@@ -172,11 +46,7 @@ export default function Dashboard() {
 	}
 
 	const buildMeetingUrl = (code: string) => {
-		const audioParam = `audio=${!isMuted}`;
-		const videoParam = `video=${!isCamOff}`;
-		const audioIdParam = selectedAudioDeviceId ? `&audioId=${selectedAudioDeviceId}` : '';
-		const videoIdParam = selectedVideoDeviceId ? `&videoId=${selectedVideoDeviceId}` : '';
-		return `/meetings/${code}?${audioParam}&${videoParam}${audioIdParam}${videoIdParam}`;
+		return `/meetings/${code}`;
 	};
 
 	const handleStartMeeting = async () => {
@@ -204,8 +74,6 @@ export default function Dashboard() {
 		let code = joinCodeInput.trim();
 		if (code.includes("/meetings/")) {
 			code = code.split("/meetings/")[1].split("?")[0];
-		} else if (code.includes("/m/")) {
-			code = code.split("/m/")[1].split("?")[0];
 		}
 		navigate(buildMeetingUrl(code));
 	}
@@ -219,9 +87,6 @@ export default function Dashboard() {
 	}
 
 	const upcomingMeetings: any[] = []
-
-	const selectedAudioDeviceObj = audioDevices.find(d => d.deviceId === selectedAudioDeviceId);
-	const selectedVideoDeviceObj = videoDevices.find(d => d.deviceId === selectedVideoDeviceId);
 
 	return (
 		<>
@@ -251,199 +116,89 @@ export default function Dashboard() {
 			{/* Virtual Meeting Hub (Start / Join Room) */}
 			<section className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
 
-				{/* Quick Actions Card: Start instant meeting */}
+				{/* Quick Actions Card: Start / Join meeting */}
 				<Card className="lg:col-span-2 border border-border-default bg-bg-surface rounded-2xl overflow-hidden flex flex-col shadow-md gap-0 p-0">
 					<CardHeader className="p-4 sm:p-6 border-b border-border-subtle bg-bg-surface-hover/40 flex flex-row items-center justify-between">
 						<div>
-							<CardTitle className="font-bold text-base sm:text-lg text-text-primary">Start a Virtual Meeting</CardTitle>
-							<CardDescription className="text-xs text-text-muted mt-0.5">Launch an instant meeting or join an ongoing conversation</CardDescription>
+							<CardTitle className="font-bold text-base sm:text-lg text-text-primary">Virtual Meeting Hub</CardTitle>
+							<CardDescription className="text-xs text-text-muted mt-0.5">Start an instant meeting or join an existing session with a code</CardDescription>
 						</div>
 						<div className="h-8 w-8 rounded-lg bg-brand-primary/10 border border-border-brand/20 flex items-center justify-center shrink-0">
 							<VideoIcon className="text-text-brand h-4 w-4" />
 						</div>
 					</CardHeader>
 
-					<CardContent className="p-4 sm:p-6 flex-1 flex flex-col md:flex-row gap-6 md:gap-8">
+					<CardContent className="p-4 sm:p-6 flex-1 flex flex-col justify-between">
+						<div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
 
-						{/* Visual Settings Preview */}
-						<div className="flex-1 flex flex-col justify-between bg-bg-app border border-border-subtle rounded-xl p-4 sm:p-5">
-							<div className="space-y-4">
-								<span className="text-xs font-semibold text-text-muted uppercase tracking-wider block">Meeting Room Settings</span>
-
-								{/* Camera Preview Box */}
-								<div className="aspect-video bg-bg-sidebar rounded-lg flex flex-col items-center justify-center border border-border-default relative overflow-hidden group">
-									{isCamOff ? (
-										<div className="text-center space-y-1">
-											<div className="h-8 w-8 rounded-full bg-bg-surface-hover flex items-center justify-center mx-auto text-text-muted">
-												<VideoIcon />
-											</div>
-											<span className="text-[11px] text-text-muted font-medium">Camera is turned off</span>
-										</div>
-									) : previewError ? (
-										<div className="text-center space-y-1 p-3">
-											<div className="h-8 w-8 rounded-full bg-status-danger/10 flex items-center justify-center mx-auto text-status-danger">
-												<WarningIcon />
-											</div>
-											<span className="text-[11px] text-status-danger font-medium block">{previewError}</span>
-										</div>
-									) : videoDevices.length === 0 ? (
-										<div className="text-center space-y-1">
-											<div className="h-8 w-8 rounded-full bg-status-warning/10 flex items-center justify-center mx-auto text-status-warning">
-												<CameraIcon />
-											</div>
-											<span className="text-[11px] text-status-warning font-medium">No Camera Device Detected</span>
-										</div>
-									) : (
-										<>
-											<video
-												ref={previewVideoRef}
-												autoPlay
-												playsInline
-												muted
-												aria-label="Live camera preview"
-												className="w-full h-full object-cover"
-											/>
-											<span className="absolute bottom-2.5 left-3 text-[10px] font-semibold text-status-success flex items-center gap-1.5 z-20 bg-bg-modal/80 px-2 py-0.5 rounded-full border border-border-subtle backdrop-blur-md">
-												<span className="h-1.5 w-1.5 rounded-full bg-status-success animate-ping" />
-												Live Camera Feed
-											</span>
-										</>
-									)}
-								</div>
-
-								{/* Camera and Microphone quick controls */}
-								<div className="flex justify-center gap-4">
-									<Button
-										variant="outline"
-										size="icon"
-										onClick={() => setIsMuted(!isMuted)}
-										aria-label={isMuted ? "Unmute Microphone" : "Mute Microphone"}
-										aria-pressed={isMuted}
-										className={`rounded-xl border transition-all cursor-pointer ${isMuted
-											? "bg-status-danger/10 border-status-danger/30 text-status-danger hover:bg-status-danger/20"
-											: "bg-bg-surface border-border-default text-text-muted hover:text-text-primary hover:bg-bg-surface-hover"
-											}`}
-										title={isMuted ? "Unmute Mic" : "Mute Mic"}
-									>
-										<MicIcon />
-									</Button>
-									<Button
-										variant="outline"
-										size="icon"
-										onClick={() => setIsCamOff(!isCamOff)}
-										aria-label={isCamOff ? "Turn Camera On" : "Turn Camera Off"}
-										aria-pressed={isCamOff}
-										className={`rounded-xl border transition-all cursor-pointer ${isCamOff
-											? "bg-status-danger/10 border-status-danger/30 text-status-danger hover:bg-status-danger/20"
-											: "bg-bg-surface border-border-default text-text-muted hover:text-text-primary hover:bg-bg-surface-hover"
-											}`}
-										title={isCamOff ? "Turn Cam On" : "Turn Cam Off"}
-									>
-										<VideoIcon />
-									</Button>
-								</div>
-
-								{/* Device Selectors */}
-								<div className="space-y-3 pt-2">
-									<div>
-										<Label htmlFor="mic-input-select" className="text-[11px] font-semibold text-text-muted uppercase tracking-wider block mb-1">Microphone Input</Label>
-										<select
-											id="mic-input-select"
-											value={selectedAudioDeviceId}
-											onChange={(e) => setSelectedAudioDeviceId(e.target.value)}
-											aria-label="Select Microphone Input"
-											className="w-full px-3 py-1.5 bg-bg-input border border-border-default rounded-xl text-xs text-text-primary focus:outline-none focus:border-border-brand"
-										>
-											{audioDevices.length > 0 ? (
-												audioDevices.map((d, i) => (
-													<option key={d.deviceId || i} value={d.deviceId}>
-														{d.label || `Microphone ${i + 1}`}
-													</option>
-												))
-											) : (
-												<option value="" disabled>No Microphone Device Detected</option>
-											)}
-										</select>
-									</div>
-
-									<div>
-										<Label htmlFor="cam-input-select" className="text-[11px] font-semibold text-text-muted uppercase tracking-wider block mb-1">Camera Input</Label>
-										<select
-											id="cam-input-select"
-											value={selectedVideoDeviceId}
-											onChange={(e) => setSelectedVideoDeviceId(e.target.value)}
-											aria-label="Select Camera Input"
-											className="w-full px-3 py-1.5 bg-bg-input border border-border-default rounded-xl text-xs text-text-primary focus:outline-none focus:border-border-brand"
-										>
-											{videoDevices.length > 0 ? (
-												videoDevices.map((d, i) => (
-													<option key={d.deviceId || i} value={d.deviceId}>
-														{d.label || `Camera ${i + 1}`}
-													</option>
-												))
-											) : (
-												<option value="" disabled>No Camera Device Detected</option>
-											)}
-										</select>
-									</div>
-								</div>
-							</div>
-
-							<div className="mt-4 pt-4 border-t border-border-subtle flex flex-col sm:flex-row justify-between text-xs text-text-muted gap-1">
-								<span className="truncate">
-									Mic: {audioDevices.length === 0 ? "Not Available" : selectedAudioDeviceObj?.label || "Default Input"}
-								</span>
-								<span className="truncate">
-									Cam: {videoDevices.length === 0 ? "Not Available" : selectedVideoDeviceObj?.label || "Default Camera"}
-								</span>
-							</div>
-						</div>
-
-						{/* Meeting options pane */}
-						<div className="flex-1 flex flex-col justify-between space-y-6">
-							<div className="space-y-4">
-								<h3 className="text-sm font-semibold text-text-primary">Start / Join Live Room</h3>
-
-								{/* Quick inputs using Shadcn Input & Label */}
+							{/* Part 1: Start Virtual Meet */}
+							<div className="flex flex-col justify-between bg-bg-app border border-border-subtle rounded-xl p-5 hover:border-border-brand/30 transition-all">
 								<div className="space-y-3">
+									<div className="h-10 w-10 rounded-xl bg-brand-primary/10 border border-border-brand/20 flex items-center justify-center text-text-brand">
+										<VideoIcon size={20} />
+									</div>
 									<div>
-										<Label htmlFor="meeting-code-input" className="text-[11px] font-semibold text-text-muted uppercase tracking-wider block mb-1.5">Meeting Code / URL</Label>
+										<h3 className="text-sm font-bold text-text-primary">Instant Meeting</h3>
+										<p className="text-xs text-text-muted mt-1 leading-relaxed">
+											Start an instant video meeting and invite team members or clients with a single click.
+										</p>
+									</div>
+								</div>
+
+								<div className="pt-5">
+									<Button
+										onClick={handleStartMeeting}
+										disabled={loadingMeeting}
+										aria-label="Start Virtual Meet"
+										className="w-full py-2.5 h-10 rounded-xl bg-gradient-to-r from-brand-primary to-brand-secondary hover:from-brand-primary-hover hover:to-brand-secondary text-text-inverse font-medium text-xs sm:text-sm shadow-lg shadow-brand-primary/20 hover:shadow-brand-primary/30 transition-all duration-300 transform active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+									>
+										<VideoIcon size={16} />
+										{loadingMeeting ? "Creating..." : "Start Virtual Meet"}
+									</Button>
+								</div>
+							</div>
+
+							{/* Part 2: Join Meeting via Code */}
+							<div className="flex flex-col justify-between bg-bg-app border border-border-subtle rounded-xl p-5 hover:border-border-brand/30 transition-all">
+								<div className="space-y-3">
+									<div className="h-10 w-10 rounded-xl bg-brand-secondary/10 border border-border-brand/20 flex items-center justify-center text-text-brand">
+										<SparklesIcon size={20} />
+									</div>
+									<div>
+										<h3 className="text-sm font-bold text-text-primary">Join via Code</h3>
+										<p className="text-xs text-text-muted mt-1 leading-relaxed">
+											Have a meeting code or invitation link? Enter it below to join the room instantly.
+										</p>
+									</div>
+
+									<div className="pt-1">
+										<Label htmlFor="meeting-code-input" className="text-[11px] font-semibold text-text-muted uppercase tracking-wider block mb-1.5">Meeting Code / Link</Label>
 										<Input
 											id="meeting-code-input"
 											type="text"
-											placeholder="e.g. xrt-vdwq-jhz"
+											placeholder="e.g. abc-defg-hij"
 											value={joinCodeInput}
 											onChange={(e) => setJoinCodeInput(e.target.value)}
 											onKeyDown={(e) => e.key === 'Enter' && handleJoinCode()}
 											aria-label="Meeting code or URL"
-											className="w-full px-4 py-2 bg-bg-input border-border-default rounded-xl text-sm placeholder:text-text-subtle text-text-primary focus-visible:border-border-brand transition-all"
+											className="w-full px-3.5 py-2 bg-bg-input border-border-default rounded-xl text-xs placeholder:text-text-subtle text-text-primary focus-visible:border-border-brand transition-all"
 										/>
 									</div>
 								</div>
+
+								<div className="pt-4">
+									<Button
+										variant="outline"
+										onClick={handleJoinCode}
+										aria-label="Join Meeting"
+										className="w-full py-2.5 h-10 rounded-xl border border-border-default bg-bg-surface-hover/30 hover:bg-bg-surface-hover hover:border-border-strong text-text-primary font-medium text-xs sm:text-sm transition-all duration-300 transform active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+									>
+										Join Meeting
+									</Button>
+								</div>
 							</div>
 
-							<div className="space-y-3">
-								<Button
-									onClick={handleStartMeeting}
-									disabled={loadingMeeting}
-									aria-label="Start Instant Meeting"
-									className="w-full py-2.5 h-10 rounded-xl bg-gradient-to-r from-brand-primary to-brand-secondary hover:from-brand-primary-hover hover:to-brand-secondary text-text-inverse font-medium text-sm shadow-lg shadow-brand-primary/20 hover:shadow-brand-primary/30 transition-all duration-300 transform active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
-								>
-									<VideoIcon size={16} />
-									{loadingMeeting ? "Creating..." : "Start Instant Meeting"}
-								</Button>
-
-								<Button
-									variant="outline"
-									onClick={handleJoinCode}
-									aria-label="Join via Code"
-									className="w-full py-2.5 h-10 rounded-xl border border-border-default bg-bg-surface-hover/30 hover:bg-bg-surface-hover hover:border-border-strong text-text-primary font-medium text-sm transition-all duration-300 transform active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
-								>
-									Join via Code
-								</Button>
-							</div>
 						</div>
-
 					</CardContent>
 				</Card>
 
@@ -484,7 +239,7 @@ export default function Dashboard() {
 
 			</section>
 
-			{/* Mock Meeting Room Started Popup Modal */}
+			{/* Meeting Room Started Popup Modal */}
 			{
 				showMeetingModal && (
 					<div
@@ -503,19 +258,19 @@ export default function Dashboard() {
 
 								<div className="space-y-1">
 									<h3 id="meeting-modal-title" className="text-lg font-bold text-text-primary">Your Meeting is Ready!</h3>
-									<p className="text-xs text-text-muted">Share this link to invite other participants to join you</p>
+									<p className="text-xs text-text-muted">Share this code to invite other participants to join you</p>
 								</div>
 
 								{/* Link copying box */}
 								<div className="w-full p-3 bg-bg-app border border-border-default rounded-xl flex items-center justify-between gap-3">
-									<span className="text-xs text-text-brand select-all truncate font-mono">{meetingLink}</span>
+									<span className="text-xs text-text-brand select-all truncate font-mono">{meetingCode}</span>
 									<Button
 										variant="ghost"
 										size="icon-sm"
-										onClick={() => copyToClipboard(meetingLink, 0)}
-										aria-label="Copy meeting link"
+										onClick={() => copyToClipboard(meetingCode, 0)}
+										aria-label="Copy meeting code"
 										className="hover:bg-bg-surface-hover rounded-lg text-text-muted hover:text-text-primary transition-colors cursor-pointer"
-										title="Copy meeting link"
+										title="Copy meeting code"
 									>
 										{copiedIndex === 0 ? <CheckIcon className="text-status-success" /> : <CopyIcon />}
 									</Button>
